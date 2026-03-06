@@ -96,12 +96,12 @@ void DxfSymbolCollector::addLWPolyline(const DRW_LWPolyline& data) {
 		if (points.size() >= 2 && SymbolGeometry::nearlyEqual(points.front(), points.back())) {
 			points.pop_back();
 		}
-
-		if (points.size() < 2) return;
-
-		const TuYuanStyle style = GetTuYuanStyle(data);
-		addTuYuan(TuYuan::makePolyline(std::move(points), closed, style));
 	}
+
+	if (points.size() < 2) return;
+
+	const TuYuanStyle style = GetTuYuanStyle(data);
+	addTuYuan(TuYuan::makePolyline(std::move(points), closed, style));
 }
 
 TuXing& DxfSymbolCollector::current()

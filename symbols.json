@@ -98,6 +98,29 @@
       ]
     },
     {
+      "id": "crack_diag",
+      "block": "SYM_CRACK_DIAG",
+      "kind": "DiagonalCrack",
+      "anchor": [0, 0],
+      "bbox": {
+        "min": [0, 0],
+        "max": [4.413347, 3.265158]
+      },
+      "style": {
+        "layer": "0",
+        "linetype": "BYLAYER",
+        "lineweight_mm": 0.22,
+        "mixed": false
+      },
+      "params": {
+        "scale_mode": "stretch_x",
+        "base_length_m": 4.413347
+      },
+      "primitives": [
+        { "type": "LWPOLYLINE", "closed": false, "pts": [[0, 0], [0.817285, 0.73466], [2.206673, 0.73466], [4.413347, 3.265158]], "style": { "layer": "0", "linetype": "BYLAYER", "lineweight_mm": 0.22 } }
+      ]
+    },
+    {
       "id": "damage",
       "block": "SYM_DAMAGE",
       "kind": "Damage",
@@ -131,6 +154,29 @@
         { "type": "LINE", "a": [-0.007357, 0.020078], "b": [10.133874, -0.030822], "style": { "layer": "0", "linetype": "BYLAYER", "lineweight_mm": 0.29 } },
         { "type": "LINE", "a": [0.005375, -1.856861], "b": [10.146607, -1.837773], "style": { "layer": "0", "linetype": "BYLAYER", "lineweight_mm": 0.29 } },
         { "type": "LINE", "a": [-0.007357, 1.871566], "b": [10.140241, 1.871566], "style": { "layer": "0", "linetype": "BYLAYER", "lineweight_mm": 0.29 } }
+      ]
+    },
+    {
+      "id": "crack_trans",
+      "block": "SYM_CRACK_TRANS",
+      "kind": "TransverseCrack",
+      "anchor": [0, 0],
+      "bbox": {
+        "min": [-0.133064, -3.056632],
+        "max": [0.133064, 3.056632]
+      },
+      "style": {
+        "layer": "0",
+        "linetype": "BYLAYER",
+        "lineweight_mm": 0.29,
+        "mixed": false
+      },
+      "params": {
+        "scale_mode": "stretch_x",
+        "base_length_m": 0.266128
+      },
+      "primitives": [
+        { "type": "LWPOLYLINE", "closed": false, "pts": [[0.133064, 3.056632], [-0.133064, -3.056632]], "style": { "layer": "0", "linetype": "BYLAYER", "lineweight_mm": 0.29 } }
       ]
     },
     {

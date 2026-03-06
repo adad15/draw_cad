@@ -24,9 +24,7 @@ int main(int argc, char* argv[]) {
 			}
 		}
 
-		MyConfig config; // 使用默认值
-
-		// 按位置参数覆盖默认配置
+		MyConfig config; // 使用默认值按位置参数覆盖默认配置
 		if (argc > 1 && argv[1]) config.input_dxf = argv[1];
 		if (argc > 2 && argv[2]) config.output_json = argv[2];
 		if (argc > 3 && argv[3]) config.unit = argv[3];

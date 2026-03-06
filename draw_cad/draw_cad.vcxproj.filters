@@ -209,6 +209,9 @@
     <ClCompile Include="SymbolClassifier.cpp">
       <Filter>源文件</Filter>
     </ClCompile>
+    <ClCompile Include="JsonScalePerSymbolTest.cpp">
+      <Filter>源文件</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <None Include="..\libxfrw\Makefile.am">

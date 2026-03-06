@@ -185,6 +185,9 @@
     <ClCompile Include="..\libxfrw\libdxfrw.cpp" />
     <ClCompile Include="DxfSymbolCollector.cpp" />
     <ClCompile Include="dxf_to_json.cpp" />
+    <ClCompile Include="JsonScalePerSymbolTest.cpp">
+      <PreprocessorDefinitions Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">JSON_SCALE_PER_SYMBOL_TEST_STANDALONE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+    </ClCompile>
     <ClCompile Include="main.cpp" />
     <ClCompile Include="mytool.cpp" />
     <ClCompile Include="SymbolClassifier.cpp" />
