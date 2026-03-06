@@ -105,6 +105,24 @@
     <ClInclude Include="..\libxfrw\intern\rscodec.h">
       <Filter>libxfrw\intern</Filter>
     </ClInclude>
+    <ClInclude Include="dxf_to_json.h">
+      <Filter>头文件</Filter>
+    </ClInclude>
+    <ClInclude Include="mytool.h">
+      <Filter>头文件</Filter>
+    </ClInclude>
+    <ClInclude Include="DxfSymbolCollector.h">
+      <Filter>头文件</Filter>
+    </ClInclude>
+    <ClInclude Include="SymbolGeometry.h">
+      <Filter>头文件</Filter>
+    </ClInclude>
+    <ClInclude Include="SymbolJsonWriter.h">
+      <Filter>头文件</Filter>
+    </ClInclude>
+    <ClInclude Include="SymbolClassifier.h">
+      <Filter>头文件</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="..\libxfrw\drw_classes.cpp">
@@ -168,6 +186,27 @@
       <Filter>libxfrw\intern</Filter>
     </ClCompile>
     <ClCompile Include="main.cpp">
+      <Filter>源文件</Filter>
+    </ClCompile>
+    <ClCompile Include="dxf_to_json.cpp">
+      <Filter>源文件</Filter>
+    </ClCompile>
+    <ClCompile Include="mytool.cpp">
+      <Filter>源文件</Filter>
+    </ClCompile>
+    <ClCompile Include="DxfSymbolCollector.cpp">
+      <Filter>源文件</Filter>
+    </ClCompile>
+    <ClCompile Include="test.cpp">
+      <Filter>源文件</Filter>
+    </ClCompile>
+    <ClCompile Include="SymbolGeometry.cpp">
+      <Filter>源文件</Filter>
+    </ClCompile>
+    <ClCompile Include="SymbolJsonWriter.cpp">
+      <Filter>源文件</Filter>
+    </ClCompile>
+    <ClCompile Include="SymbolClassifier.cpp">
       <Filter>源文件</Filter>
     </ClCompile>
   </ItemGroup>

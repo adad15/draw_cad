@@ -21,8 +21,8 @@
   <PropertyGroup Label="Globals">
     <VCProjectVersion>17.0</VCProjectVersion>
     <Keyword>Win32Proj</Keyword>
-    <ProjectGuid>{5a0ce148-d161-44d8-bb45-9065cb6970b3}</ProjectGuid>
-    <RootNamespace>drawcad</RootNamespace>
+    <ProjectGuid>{429bcbce-fa5c-4fee-88da-63b3288f2daa}</ProjectGuid>
+    <RootNamespace>drawcadtest</RootNamespace>
     <WindowsTargetPlatformVersion>10.0</WindowsTargetPlatformVersion>
   </PropertyGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
@@ -102,14 +102,11 @@
       <SDLCheck>true</SDLCheck>
       <PreprocessorDefinitions>_DEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
-      <LanguageStandard>stdcpp20</LanguageStandard>
-      <AdditionalIncludeDirectories>D:\vs2022 code\draw_cad\libiconv\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(SolutionDir)draw_cad</AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>
       <GenerateDebugInformation>true</GenerateDebugInformation>
-      <AdditionalLibraryDirectories>D:\vs2022 code\draw_cad\libiconv\lib;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
-      <AdditionalDependencies>libiconvD.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
@@ -126,76 +123,6 @@
       <GenerateDebugInformation>true</GenerateDebugInformation>
     </Link>
   </ItemDefinitionGroup>
-  <ItemGroup>
-    <ClInclude Include="..\libxfrw\drw_base.h" />
-    <ClInclude Include="..\libxfrw\drw_classes.h" />
-    <ClInclude Include="..\libxfrw\drw_entities.h" />
-    <ClInclude Include="..\libxfrw\drw_header.h" />
-    <ClInclude Include="..\libxfrw\drw_interface.h" />
-    <ClInclude Include="..\libxfrw\drw_objects.h" />
-    <ClInclude Include="..\libxfrw\intern\drw_cptable932.h" />
-    <ClInclude Include="..\libxfrw\intern\drw_cptable936.h" />
-    <ClInclude Include="..\libxfrw\intern\drw_cptable949.h" />
-    <ClInclude Include="..\libxfrw\intern\drw_cptable950.h" />
-    <ClInclude Include="..\libxfrw\intern\drw_cptables.h" />
-    <ClInclude Include="..\libxfrw\intern\drw_dbg.h" />
-    <ClInclude Include="..\libxfrw\intern\drw_textcodec.h" />
-    <ClInclude Include="..\libxfrw\intern\dwgbuffer.h" />
-    <ClInclude Include="..\libxfrw\intern\dwgreader.h" />
-    <ClInclude Include="..\libxfrw\intern\dwgreader15.h" />
-    <ClInclude Include="..\libxfrw\intern\dwgreader18.h" />
-    <ClInclude Include="..\libxfrw\intern\dwgreader21.h" />
-    <ClInclude Include="..\libxfrw\intern\dwgreader24.h" />
-    <ClInclude Include="..\libxfrw\intern\dwgreader27.h" />
-    <ClInclude Include="..\libxfrw\intern\dwgreader32.h" />
-    <ClInclude Include="..\libxfrw\intern\dwgutil.h" />
-    <ClInclude Include="..\libxfrw\intern\dxfreader.h" />
-    <ClInclude Include="..\libxfrw\intern\dxfwriter.h" />
-    <ClInclude Include="..\libxfrw\intern\rscodec.h" />
-    <ClInclude Include="..\libxfrw\libdwgr.h" />
-    <ClInclude Include="..\libxfrw\libdxfrw.h" />
-    <ClInclude Include="..\libxfrw\main_doc.h" />
-    <ClInclude Include="DxfSymbolCollector.h" />
-    <ClInclude Include="dxf_to_json.h" />
-    <ClInclude Include="mytool.h" />
-    <ClInclude Include="SymbolClassifier.h" />
-    <ClInclude Include="SymbolGeometry.h" />
-    <ClInclude Include="SymbolJsonWriter.h" />
-  </ItemGroup>
-  <ItemGroup>
-    <ClCompile Include="..\libxfrw\drw_classes.cpp" />
-    <ClCompile Include="..\libxfrw\drw_entities.cpp" />
-    <ClCompile Include="..\libxfrw\drw_header.cpp" />
-    <ClCompile Include="..\libxfrw\drw_objects.cpp" />
-    <ClCompile Include="..\libxfrw\intern\drw_dbg.cpp" />
-    <ClCompile Include="..\libxfrw\intern\drw_textcodec.cpp" />
-    <ClCompile Include="..\libxfrw\intern\dwgbuffer.cpp" />
-    <ClCompile Include="..\libxfrw\intern\dwgreader.cpp" />
-    <ClCompile Include="..\libxfrw\intern\dwgreader15.cpp" />
-    <ClCompile Include="..\libxfrw\intern\dwgreader18.cpp" />
-    <ClCompile Include="..\libxfrw\intern\dwgreader21.cpp" />
-    <ClCompile Include="..\libxfrw\intern\dwgreader24.cpp" />
-    <ClCompile Include="..\libxfrw\intern\dwgreader27.cpp" />
-    <ClCompile Include="..\libxfrw\intern\dwgreader32.cpp" />
-    <ClCompile Include="..\libxfrw\intern\dwgutil.cpp" />
-    <ClCompile Include="..\libxfrw\intern\dxfreader.cpp" />
-    <ClCompile Include="..\libxfrw\intern\dxfwriter.cpp" />
-    <ClCompile Include="..\libxfrw\intern\rscodec.cpp" />
-    <ClCompile Include="..\libxfrw\libdwgr.cpp" />
-    <ClCompile Include="..\libxfrw\libdxfrw.cpp" />
-    <ClCompile Include="DxfSymbolCollector.cpp" />
-    <ClCompile Include="dxf_to_json.cpp" />
-    <ClCompile Include="main.cpp" />
-    <ClCompile Include="mytool.cpp" />
-    <ClCompile Include="SymbolClassifier.cpp" />
-    <ClCompile Include="SymbolGeometry.cpp" />
-    <ClCompile Include="SymbolJsonWriter.cpp" />
-    <ClCompile Include="test.cpp" />
-  </ItemGroup>
-  <ItemGroup>
-    <None Include="..\libxfrw\Makefile.am" />
-    <None Include="..\libxfrw\Makefile.in" />
-  </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">
   </ImportGroup>
