@@ -75,42 +75,51 @@ auto_cad_gui    Qt Widgets 界面
 
 当前界面参考“报告转 CAD 工作台”的工作台风格，不再是传统表单堆叠界面。
 
-主窗口由“顶部导航 + 页面标题 + 内容页栈”组成：
+主窗口由“左侧模块侧栏 + 顶部工作区标题栏 + 内容页栈”组成：
 
 ```text
-顶部状态栏
-    |
-页面标题和说明
-    |
-contentStack_
-├─ CAD 生成页面
-├─ 标书生成页面
-└─ AI 设置页面
+AppShell
+├─ Sidebar
+│  ├─ 品牌区
+│  ├─ CAD 生成 / 标书生成 / 文件库 / AI 设置
+│  └─ 本地批量生成说明
+└─ Workspace
+   ├─ HeaderBar
+   │  ├─ pageTitleLabel_
+   │  ├─ pageSubtitleLabel_
+   │  └─ 搜索 / 通知 / 用户头像
+   └─ contentStack_
+      ├─ CAD 生成页面
+      ├─ 标书生成页面
+      └─ AI 设置页面
 ```
 
 页面切换由 `AutoCadGui::setActiveModule()` 控制。切换页面时会同步更新：
 
-- 顶部导航按钮的激活样式。
+- 侧栏导航按钮的激活样式。
 - 页面标题 `pageTitleLabel_`。
 - 页面说明 `pageSubtitleLabel_`。
 - `contentStack_` 当前页。
 
-### 3.1 顶部状态栏
+### 3.1 侧栏与工作区标题栏
 
-顶部状态栏在 `AutoCadGui::setupUi()` 中创建：
+侧栏和工作区标题栏在 `AutoCadGui::setupUi()` 中创建：
 
-- 左侧品牌：`ReportCAD.` 和蓝色 `CAD` 图标。
-- 中间导航：`CAD 生成`、`标书生成`、`文件库`、`AI 设置`。
-- 右侧工具：搜索框、通知按钮、用户头像。
+- 左侧侧栏：`ReportCAD` 品牌、模块导航和本地批量生成说明。
+- 右侧工作区标题栏：页面标题、页面说明、搜索框、通知按钮、用户头像。
 
 主要对象名：
 
 ```text
-TopBar
+AppShell
+Sidebar
+Workspace
+HeaderBar
 BrandIcon
 BrandText
 ActiveNavButton
 NavButton
+SidebarStatus
 SearchEdit
 NotificationButton
 UserAvatar
@@ -305,6 +314,7 @@ boardLengthSourceStatusLabel_
 2. “恢复默认”把 `boardLengthSourceEdit_` 还原为 `defaultPath("板长分布表")`。
 3. `refreshBoardLengthSourceStatus()` 会检查目录是否存在，并统计 `.xlsx/.xlsm/.xls` 数量。
 4. 后端输入契约不变，`collectInput()` 仍把 `boardLengthSourceEdit_` 写入 `WorkflowInput::boardLengthSource`。
+5. CAD 生成页放入 `ContentScroll` 可滚动工作区，数据源卡片和输出目录卡片使用固定高度并排显示，避免在较低窗口高度下与上传区域或底部操作按钮发生重叠。
 
 ### 3.6 默认输入输出策略
 
@@ -340,10 +350,23 @@ outputDirEdit_->setText(defaultPath("batch_output"));
 输出目录
 ```
 
+界面布局为：
+
+```text
+ContentScroll / CadDashboard
+├─ GeneratorCard
+│  ├─ HeroPanel
+│  ├─ 本次任务文件 TaskFilePanel
+│  ├─ 基础数据源卡片        输出目录卡片
+│  └─ 开始生成 / 取消 / 打开输出目录
+└─ QueueCard
+```
+
 创建函数：
 
 ```cpp
 QHBoxLayout* AutoCadGui::createPathRow(...)
+QWidget* AutoCadGui::createOutputDirectoryCard()
 ```
 
 功能：
