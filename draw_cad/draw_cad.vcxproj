@@ -70,6 +70,10 @@
     <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
   </ImportGroup>
   <PropertyGroup Label="UserMacros" />
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
+    <IncludePath>$(ProjectDir)..\OpenXLSX\include\headers;$(ProjectDir)..\OpenXLSX\include;$(IncludePath)</IncludePath>
+    <LibraryPath>$(ProjectDir)..\OpenXLSX\lib;$(LibraryPath)</LibraryPath>
+  </PropertyGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
     <ClCompile>
       <WarningLevel>Level3</WarningLevel>
@@ -103,13 +107,13 @@
       <PreprocessorDefinitions>_DEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
       <LanguageStandard>stdcpp20</LanguageStandard>
-      <AdditionalIncludeDirectories>D:\vs2022 code\draw_cad\libiconv\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(ProjectDir)..\libiconv\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>
       <GenerateDebugInformation>true</GenerateDebugInformation>
-      <AdditionalLibraryDirectories>D:\vs2022 code\draw_cad\libiconv\lib;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
-      <AdditionalDependencies>libiconvD.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalLibraryDirectories>$(ProjectDir)..\libiconv\lib;$(ProjectDir)..\OpenXLSX\lib;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+      <AdditionalDependencies>libiconvD.lib;OpenXLSXd.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
@@ -155,12 +159,22 @@
     <ClInclude Include="..\libxfrw\libdwgr.h" />
     <ClInclude Include="..\libxfrw\libdxfrw.h" />
     <ClInclude Include="..\libxfrw\main_doc.h" />
+    <ClInclude Include="..\nlohmann\json.hpp" />
+    <ClInclude Include="..\OpenXLSX\include\OpenXLSX-Exports.hpp" />
+    <ClInclude Include="..\OpenXLSX\include\OpenXLSX.hpp" />
+    <ClInclude Include="BoardLengthJsonExporter.h" />
+    <ClInclude Include="DiseaseReportJsonExporter.h" />
     <ClInclude Include="DxfSymbolCollector.h" />
+    <ClInclude Include="InspectionRow.h" />
+    <ClInclude Include="InspectionTableReader.h" />
+    <ClInclude Include="LiningPlanDxfWriter.h" />
     <ClInclude Include="dxf_to_json.h" />
+    <ClInclude Include="JsonSymbolDxfWriter.h" />
     <ClInclude Include="mytool.h" />
     <ClInclude Include="SymbolClassifier.h" />
     <ClInclude Include="SymbolGeometry.h" />
     <ClInclude Include="SymbolJsonWriter.h" />
+    <ClInclude Include="WorkflowMessageLog.h" />
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="..\libxfrw\drw_classes.cpp" />
@@ -183,16 +197,19 @@
     <ClCompile Include="..\libxfrw\intern\rscodec.cpp" />
     <ClCompile Include="..\libxfrw\libdwgr.cpp" />
     <ClCompile Include="..\libxfrw\libdxfrw.cpp" />
+    <ClCompile Include="BoardLengthJsonExporter.cpp" />
+    <ClCompile Include="DiseaseReportJsonExporter.cpp" />
     <ClCompile Include="DxfSymbolCollector.cpp" />
+    <ClCompile Include="InspectionTableReader.cpp" />
+    <ClCompile Include="LiningPlanDxfWriter.cpp" />
     <ClCompile Include="dxf_to_json.cpp" />
-    <ClCompile Include="JsonScalePerSymbolTest.cpp">
-      <PreprocessorDefinitions Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">JSON_SCALE_PER_SYMBOL_TEST_STANDALONE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
-    </ClCompile>
+    <ClCompile Include="JsonSymbolDxfWriter.cpp" />
     <ClCompile Include="main.cpp" />
     <ClCompile Include="mytool.cpp" />
     <ClCompile Include="SymbolClassifier.cpp" />
     <ClCompile Include="SymbolGeometry.cpp" />
     <ClCompile Include="SymbolJsonWriter.cpp" />
+    <ClCompile Include="WorkflowMessageLog.cpp" />
     <ClCompile Include="test.cpp" />
   </ItemGroup>
   <ItemGroup>

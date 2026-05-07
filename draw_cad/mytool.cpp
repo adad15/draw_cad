@@ -1,5 +1,5 @@
 ﻿#include "mytool.h"
-#include <cctype>`
+#include <cctype>
 #include <cmath>
 #include <sstream>
 #include <iomanip>

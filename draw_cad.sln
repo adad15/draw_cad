@@ -5,6 +5,11 @@ VisualStudioVersion = 17.14.36915.13
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "draw_cad", "draw_cad\draw_cad.vcxproj", "{5A0CE148-D161-44D8-BB45-9065CB6970B3}"
 EndProject
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "auto_cad_gui", "auto_cad_gui\auto_cad_gui.vcxproj", "{B1FEBE88-8E59-4F19-A678-E9913950D6C2}"
+	ProjectSection(ProjectDependencies) = postProject
+		{5A0CE148-D161-44D8-BB45-9065CB6970B3} = {5A0CE148-D161-44D8-BB45-9065CB6970B3}
+	EndProjectSection
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|x64 = Debug|x64
@@ -21,6 +26,12 @@ Global
 		{5A0CE148-D161-44D8-BB45-9065CB6970B3}.Release|x64.Build.0 = Release|x64
 		{5A0CE148-D161-44D8-BB45-9065CB6970B3}.Release|x86.ActiveCfg = Release|Win32
 		{5A0CE148-D161-44D8-BB45-9065CB6970B3}.Release|x86.Build.0 = Release|Win32
+		{B1FEBE88-8E59-4F19-A678-E9913950D6C2}.Debug|x64.ActiveCfg = Debug|x64
+		{B1FEBE88-8E59-4F19-A678-E9913950D6C2}.Debug|x64.Build.0 = Debug|x64
+		{B1FEBE88-8E59-4F19-A678-E9913950D6C2}.Debug|x86.ActiveCfg = Debug|x64
+		{B1FEBE88-8E59-4F19-A678-E9913950D6C2}.Release|x64.ActiveCfg = Release|x64
+		{B1FEBE88-8E59-4F19-A678-E9913950D6C2}.Release|x64.Build.0 = Release|x64
+		{B1FEBE88-8E59-4F19-A678-E9913950D6C2}.Release|x86.ActiveCfg = Release|x64
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

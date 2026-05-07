@@ -162,8 +162,8 @@
       "kind": "TransverseCrack",
       "anchor": [0, 0],
       "bbox": {
-        "min": [-0.133064, -3.056632],
-        "max": [0.133064, 3.056632]
+        "min": [0, -3.056729],
+        "max": [0, 3.056729]
       },
       "style": {
         "layer": "0",
@@ -173,10 +173,10 @@
       },
       "params": {
         "scale_mode": "stretch_x",
-        "base_length_m": 0.266128
+        "base_length_m": 0.000001
       },
       "primitives": [
-        { "type": "LWPOLYLINE", "closed": false, "pts": [[0.133064, 3.056632], [-0.133064, -3.056632]], "style": { "layer": "0", "linetype": "BYLAYER", "lineweight_mm": 0.29 } }
+        { "type": "LINE", "a": [0, 3.056729], "b": [0, -3.056729], "style": { "layer": "0", "linetype": "BYLAYER", "lineweight_mm": 0.29 } }
       ]
     },
     {

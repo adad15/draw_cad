@@ -19,6 +19,12 @@
     <Filter Include="libxfrw\intern">
       <UniqueIdentifier>{9cdd774d-ff26-4cee-a10e-991ce03cbaba}</UniqueIdentifier>
     </Filter>
+    <Filter Include="nlohmann">
+      <UniqueIdentifier>{5608ac1a-c56d-44c8-a461-fb6ca8b606a4}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="OpenXLSX">
+      <UniqueIdentifier>{5f3eb3ac-f71e-4baa-8c3e-227430ae72a2}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\libxfrw\drw_base.h">
@@ -123,6 +129,36 @@
     <ClInclude Include="SymbolClassifier.h">
       <Filter>头文件</Filter>
     </ClInclude>
+    <ClInclude Include="JsonSymbolDxfWriter.h">
+      <Filter>头文件</Filter>
+    </ClInclude>
+    <ClInclude Include="BoardLengthJsonExporter.h">
+      <Filter>头文件</Filter>
+    </ClInclude>
+    <ClInclude Include="DiseaseReportJsonExporter.h">
+      <Filter>头文件</Filter>
+    </ClInclude>
+    <ClInclude Include="InspectionRow.h">
+      <Filter>头文件</Filter>
+    </ClInclude>
+    <ClInclude Include="InspectionTableReader.h">
+      <Filter>头文件</Filter>
+    </ClInclude>
+    <ClInclude Include="LiningPlanDxfWriter.h">
+      <Filter>头文件</Filter>
+    </ClInclude>
+    <ClInclude Include="..\nlohmann\json.hpp">
+      <Filter>nlohmann</Filter>
+    </ClInclude>
+    <ClInclude Include="..\OpenXLSX\include\OpenXLSX.hpp">
+      <Filter>OpenXLSX</Filter>
+    </ClInclude>
+    <ClInclude Include="..\OpenXLSX\include\OpenXLSX-Exports.hpp">
+      <Filter>OpenXLSX</Filter>
+    </ClInclude>
+    <ClInclude Include="WorkflowMessageLog.h">
+      <Filter>头文件</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="..\libxfrw\drw_classes.cpp">
@@ -209,7 +245,22 @@
     <ClCompile Include="SymbolClassifier.cpp">
       <Filter>源文件</Filter>
     </ClCompile>
-    <ClCompile Include="JsonScalePerSymbolTest.cpp">
+    <ClCompile Include="JsonSymbolDxfWriter.cpp">
+      <Filter>源文件</Filter>
+    </ClCompile>
+    <ClCompile Include="BoardLengthJsonExporter.cpp">
+      <Filter>源文件</Filter>
+    </ClCompile>
+    <ClCompile Include="DiseaseReportJsonExporter.cpp">
+      <Filter>源文件</Filter>
+    </ClCompile>
+    <ClCompile Include="InspectionTableReader.cpp">
+      <Filter>源文件</Filter>
+    </ClCompile>
+    <ClCompile Include="LiningPlanDxfWriter.cpp">
+      <Filter>源文件</Filter>
+    </ClCompile>
+    <ClCompile Include="WorkflowMessageLog.cpp">
       <Filter>源文件</Filter>
     </ClCompile>
   </ItemGroup>
