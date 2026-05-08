@@ -1,5 +1,7 @@
 #include "AutoCadGui.h"
 
+#include "AntDesignStyle.h"
+
 #include <QApplication>
 #include <QCoreApplication>
 #include <QDateTime>
@@ -12,9 +14,10 @@
 #include <QHBoxLayout>
 #include <QLabel>
 #include <QLineEdit>
+#include <QPair>
 #include <QProgressBar>
 #include <QPushButton>
-#include <QScrollArea>
+#include <QComboBox>
 #include <QSizePolicy>
 #include <QStackedWidget>
 #include <QStyle>
@@ -123,8 +126,14 @@ AutoCadGui::AutoCadGui(QWidget* parent)
             setRunning(false);
             progressBar_->setRange(0, 1);
             progressBar_->setValue(ok ? 1 : 0);
-            statusLabel_->setText(ok ? "完成" : "失败");
-            outputSummaryLabel_->setText(summary);
+            statusLabel_->setText(ok ? "生成完成" : "生成失败，请查看日志");
+            statusLabel_->show();
+            outputSummaryLabel_->setText(summary.isEmpty() ? (ok ? "已完成生成任务。" : "生成失败。") : summary);
+            outputSummaryLabel_->show();
+            if (openOutputButton_) {
+                openOutputButton_->show();
+            }
+            setGenerationStatus(ok ? "已完成" : "有错误", ok ? "done" : "error");
             updateStepState(ok ? stepLabels_.size() : 0, stepLabels_.size());
             appendLog(summary);
             setLogDialogFinished(ok, summary);
@@ -133,41 +142,43 @@ AutoCadGui::AutoCadGui(QWidget* parent)
 
 void AutoCadGui::setupUi() {
     setWindowTitle("报告转 CAD 工作台");
-    setMinimumSize(1240, 740);
+    setMinimumSize(1280, 740);
     setObjectName("AppShell");
 
-    auto* rootLayout = new QHBoxLayout(this);
+    auto* rootLayout = new QVBoxLayout(this);
     rootLayout->setContentsMargins(0, 0, 0, 0);
     rootLayout->setSpacing(0);
 
-    auto* sidebar = new QWidget(this);
-    sidebar->setObjectName("Sidebar");
-    sidebar->setFixedWidth(244);
-    auto* sidebarLayout = new QVBoxLayout(sidebar);
-    sidebarLayout->setContentsMargins(18, 18, 18, 18);
-    sidebarLayout->setSpacing(18);
+    auto* topBar = new QWidget(this);
+    topBar->setObjectName("TopBar");
+    AntDesignStyle::applyTopBarShadow(topBar);
+    topBar->setFixedHeight(72);
+    auto* topBarLayout = new QHBoxLayout(topBar);
+    topBarLayout->setContentsMargins(28, 8, 28, 8);
+    topBarLayout->setSpacing(18);
 
+    auto* brandGroup = new QHBoxLayout();
+    brandGroup->setSpacing(8);
     auto* brandRow = new QHBoxLayout();
-    brandRow->setSpacing(12);
-    auto* brandIcon = new QLabel("CAD", sidebar);
+    brandRow->setSpacing(8);
+    auto* brandIcon = new QLabel("✎", topBar);
     brandIcon->setObjectName("BrandIcon");
     brandIcon->setAlignment(Qt::AlignCenter);
-    brandIcon->setFixedSize(44, 44);
-    auto* brandText = new QLabel("ReportCAD", sidebar);
+    brandIcon->setFixedSize(40, 40);
+    auto* brandText = new QLabel("ReportCAD.", topBar);
     brandText->setObjectName("BrandText");
     brandRow->addWidget(brandIcon);
-    brandRow->addWidget(brandText, 1);
-    sidebarLayout->addLayout(brandRow);
+    brandRow->addWidget(brandText);
+    brandGroup->addLayout(brandRow);
+    topBarLayout->addLayout(brandGroup);
+    topBarLayout->addSpacing(24);
 
-    auto* navLabel = new QLabel("工作模块", sidebar);
-    navLabel->setObjectName("SidebarLabel");
-    sidebarLayout->addWidget(navLabel);
-
-    const auto makeNavButton = [this, sidebar](const QString& text, QStyle::StandardPixmap icon, bool active) {
-        auto* button = new QPushButton(text, sidebar);
+    const auto makeNavButton = [this, topBar](const QString& text, QStyle::StandardPixmap icon, bool active) {
+        auto* button = new QPushButton(text, topBar);
         button->setObjectName(active ? "ActiveNavButton" : "NavButton");
         button->setIcon(style()->standardIcon(icon));
-        button->setFixedHeight(44);
+        button->setFixedHeight(46);
+        button->setMinimumWidth(92);
         button->setCursor(Qt::PointingHandCursor);
         return button;
     };
@@ -175,75 +186,59 @@ void AutoCadGui::setupUi() {
     tenderNavButton_ = makeNavButton("标书生成", QStyle::SP_FileDialogListView, false);
     fileLibraryNavButton_ = makeNavButton("文件库", QStyle::SP_FileIcon, false);
     aiSettingsNavButton_ = makeNavButton("AI 设置", QStyle::SP_FileDialogInfoView, false);
-    sidebarLayout->addWidget(cadNavButton_);
-    sidebarLayout->addWidget(tenderNavButton_);
-    sidebarLayout->addWidget(fileLibraryNavButton_);
-    sidebarLayout->addWidget(aiSettingsNavButton_);
-    sidebarLayout->addStretch();
+    topBarLayout->addWidget(cadNavButton_);
+    topBarLayout->addWidget(tenderNavButton_);
+    topBarLayout->addWidget(fileLibraryNavButton_);
+    topBarLayout->addWidget(aiSettingsNavButton_);
+    topBarLayout->addStretch();
 
-    auto* sidebarStatus = new QWidget(sidebar);
-    sidebarStatus->setObjectName("SidebarStatus");
-    auto* sidebarStatusLayout = new QVBoxLayout(sidebarStatus);
-    sidebarStatusLayout->setContentsMargins(14, 12, 14, 12);
-    sidebarStatusLayout->setSpacing(6);
-    auto* statusTitle = new QLabel("本地批量生成", sidebarStatus);
-    statusTitle->setObjectName("SidebarStatusTitle");
-    auto* statusHint = new QLabel("外观病害表作为任务输入，板长表作为基础数据源。", sidebarStatus);
-    statusHint->setObjectName("SidebarStatusHint");
-    statusHint->setWordWrap(true);
-    sidebarStatusLayout->addWidget(statusTitle);
-    sidebarStatusLayout->addWidget(statusHint);
-    sidebarLayout->addWidget(sidebarStatus);
-    rootLayout->addWidget(sidebar);
-
-    auto* workspace = new QWidget(this);
-    workspace->setObjectName("Workspace");
-    auto* bodyLayout = new QVBoxLayout(workspace);
-    bodyLayout->setContentsMargins(24, 22, 24, 22);
-    bodyLayout->setSpacing(18);
-    rootLayout->addWidget(workspace, 1);
-
-    auto* header = new QWidget(workspace);
-    header->setObjectName("HeaderBar");
-    header->setFixedHeight(82);
-    auto* headerLayout = new QHBoxLayout(header);
-    headerLayout->setContentsMargins(20, 14, 20, 14);
-    headerLayout->setSpacing(16);
-
-    auto* titleLayout = new QVBoxLayout();
-    titleLayout->setSpacing(4);
-    pageTitleLabel_ = new QLabel("报告转 CAD 工作台", header);
-    pageTitleLabel_->setObjectName("PageTitle");
-    pageSubtitleLabel_ = new QLabel("上传外观病害总表，选择衬砌长度/板长数据源，自动生成多个标准 CAD 图纸文档。", header);
-    pageSubtitleLabel_->setObjectName("PageSubtitle");
-    titleLayout->addWidget(pageTitleLabel_);
-    titleLayout->addWidget(pageSubtitleLabel_);
-    headerLayout->addLayout(titleLayout, 1);
-
-    auto* searchEdit = new QLineEdit(header);
+    auto* searchEdit = new QLineEdit(topBar);
     searchEdit->setObjectName("SearchEdit");
-    searchEdit->setPlaceholderText("搜索任务或文件...");
-    searchEdit->setFixedSize(260, 40);
+    searchEdit->setPlaceholderText("搜索...");
+    searchEdit->setFixedSize(320, 42);
     searchEdit->addAction(style()->standardIcon(QStyle::SP_FileDialogContentsView), QLineEdit::LeadingPosition);
-    headerLayout->addWidget(searchEdit);
+    topBarLayout->addWidget(searchEdit);
 
-    auto* notificationButton = new QPushButton("!", header);
+    auto* notificationButton = new QPushButton("!", topBar);
     notificationButton->setObjectName("NotificationButton");
-    notificationButton->setFixedSize(40, 40);
+    notificationButton->setFixedSize(38, 38);
     notificationButton->setCursor(Qt::PointingHandCursor);
-    headerLayout->addWidget(notificationButton);
+    topBarLayout->addWidget(notificationButton);
 
-    auto* divider = new QFrame(header);
+    auto* divider = new QFrame(topBar);
     divider->setObjectName("TopDivider");
     divider->setFixedSize(1, 28);
-    headerLayout->addWidget(divider);
+    topBarLayout->addWidget(divider);
 
-    auto* userAvatar = new QLabel("US", header);
+    auto* userAvatar = new QLabel("US", topBar);
     userAvatar->setObjectName("UserAvatar");
     userAvatar->setAlignment(Qt::AlignCenter);
     userAvatar->setFixedSize(40, 40);
-    headerLayout->addWidget(userAvatar);
-    bodyLayout->addWidget(header);
+    topBarLayout->addWidget(userAvatar);
+    rootLayout->addWidget(topBar);
+
+    auto* bodyLayout = new QVBoxLayout();
+    bodyLayout->setContentsMargins(28, 24, 28, 12);
+    bodyLayout->setSpacing(8);
+    rootLayout->addLayout(bodyLayout, 1);
+
+    auto* pageTitleRow = new QHBoxLayout();
+    pageTitleRow->setSpacing(12);
+    pageTitleIconLabel_ = new QLabel("≡", this);
+    pageTitleIconLabel_->setObjectName("PageTitleIcon");
+    pageTitleIconLabel_->setAlignment(Qt::AlignCenter);
+    pageTitleIconLabel_->setFixedSize(28, 28);
+    pageTitleLabel_ = new QLabel("批量生成衬砌平面图", this);
+    pageTitleLabel_->setObjectName("PageTitle");
+    pageTitleRow->addWidget(pageTitleIconLabel_);
+    pageTitleRow->addWidget(pageTitleLabel_);
+    pageTitleRow->addStretch();
+    bodyLayout->addLayout(pageTitleRow);
+
+    pageSubtitleLabel_ = new QLabel("上传外观病害总表，自动匹配板长基础数据，批量生成各个数据表的 DXF 图纸。", this);
+    pageSubtitleLabel_->setObjectName("PageSubtitle");
+    bodyLayout->addWidget(pageSubtitleLabel_);
+    bodyLayout->addSpacing(18);
 
     contentStack_ = new QStackedWidget(this);
     contentStack_->setObjectName("ContentStack");
@@ -255,76 +250,54 @@ void AutoCadGui::setupUi() {
     cadPageLayout->setContentsMargins(0, 0, 0, 0);
     cadPageLayout->setSpacing(0);
 
-    auto* cadScroll = new QScrollArea(cadPage);
-    cadScroll->setObjectName("ContentScroll");
-    cadScroll->setWidgetResizable(true);
-    cadScroll->setFrameShape(QFrame::NoFrame);
-    cadScroll->setHorizontalScrollBarPolicy(Qt::ScrollBarAsNeeded);
-    cadScroll->setVerticalScrollBarPolicy(Qt::ScrollBarAsNeeded);
-
-    auto* cadDashboard = new QWidget(cadScroll);
+    auto* cadDashboard = new QWidget(cadPage);
     cadDashboard->setObjectName("CadDashboard");
+    cadDashboard->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Preferred);
     auto* mainLayout = new QHBoxLayout(cadDashboard);
-    mainLayout->setContentsMargins(0, 0, 0, 0);
-    mainLayout->setSpacing(18);
-    cadScroll->setWidget(cadDashboard);
-    cadPageLayout->addWidget(cadScroll);
+    mainLayout->setContentsMargins(0, 0, 0, 12);
+    mainLayout->setSpacing(24);
+    cadPageLayout->addWidget(cadDashboard);
     contentStack_->addWidget(cadPage);
 
     exeEdit_ = new QLineEdit(this);
     exeEdit_->hide();
 
-    auto* generatorCard = new QWidget(this);
-    generatorCard->setObjectName("GeneratorCard");
-    generatorCard->setMinimumWidth(600);
-    auto* generatorLayout = new QVBoxLayout(generatorCard);
-    generatorLayout->setContentsMargins(0, 0, 0, 0);
-    generatorLayout->setSpacing(16);
+    auto* leftColumn = new QWidget(this);
+    leftColumn->setObjectName("LeftWorkflowColumn");
+    leftColumn->setMinimumWidth(600);
+    auto* leftColumnLayout = new QVBoxLayout(leftColumn);
+    leftColumnLayout->setContentsMargins(0, 0, 0, 0);
+    leftColumnLayout->setSpacing(22);
 
-    auto* heroPanel = new QWidget(generatorCard);
-    heroPanel->setObjectName("HeroPanel");
-    heroPanel->setFixedHeight(116);
-    auto* generatorHeader = new QHBoxLayout(heroPanel);
-    generatorHeader->setContentsMargins(22, 18, 22, 18);
-    generatorHeader->setSpacing(12);
-    auto* iconLabel = new QLabel("CAD", generatorCard);
+    auto* generatorCard = new QWidget(leftColumn);
+    generatorCard->setObjectName("GeneratorCard");
+    AntDesignStyle::applyCardShadow(generatorCard);
+    auto* generatorLayout = new QVBoxLayout(generatorCard);
+    generatorLayout->setContentsMargins(24, 20, 24, 22);
+    generatorLayout->setSpacing(18);
+
+    auto* generatorHeader = new QHBoxLayout();
+    generatorHeader->setSpacing(10);
+    auto* iconLabel = new QLabel("▦", generatorCard);
     iconLabel->setObjectName("FeatureIcon");
     iconLabel->setAlignment(Qt::AlignCenter);
-    iconLabel->setFixedSize(42, 42);
+    iconLabel->setFixedSize(32, 32);
     auto* headerText = new QVBoxLayout();
-    headerText->setSpacing(4);
-    auto* cardTitle = new QLabel("批量 CAD 图纸生成", generatorCard);
+    headerText->setSpacing(2);
+    auto* cardTitle = new QLabel("本次任务文件", generatorCard);
     cardTitle->setObjectName("CardBigTitle");
-    auto* cardSubtitle = new QLabel("上传外观病害总表，选择衬砌长度数据源后批量生成 DXF 文件", generatorCard);
+    auto* cardSubtitle = new QLabel("外观病害 Excel 是本次生成任务的主输入", generatorCard);
     cardSubtitle->setObjectName("MutedText");
     headerText->addWidget(cardTitle);
     headerText->addWidget(cardSubtitle);
     generatorHeader->addWidget(iconLabel);
     generatorHeader->addLayout(headerText, 1);
-    auto* flowChip = new QLabel("Excel -> 数据源匹配 -> DXF", heroPanel);
-    flowChip->setObjectName("HeroFlowChip");
-    flowChip->setAlignment(Qt::AlignCenter);
-    flowChip->setFixedHeight(34);
-    flowChip->setMinimumWidth(178);
     generatorHeader->addStretch();
-    generatorHeader->addWidget(flowChip);
-    generatorLayout->addWidget(heroPanel);
+    generatorLayout->addLayout(generatorHeader);
 
     auto* inputLayout = new QVBoxLayout();
-    inputLayout->setContentsMargins(22, 0, 22, 0);
+    inputLayout->setContentsMargins(0, 0, 0, 0);
     inputLayout->setSpacing(14);
-    auto* stepOneLayout = new QHBoxLayout();
-    stepOneLayout->setSpacing(12);
-    auto* stepOne = new QLabel("1", generatorCard);
-    stepOne->setObjectName("StepNumber");
-    stepOne->setAlignment(Qt::AlignCenter);
-    stepOne->setFixedSize(30, 30);
-    auto* stepOneTitle = new QLabel("本次任务文件", generatorCard);
-    stepOneTitle->setObjectName("SectionTitle");
-    stepOneLayout->addWidget(stepOne);
-    stepOneLayout->addWidget(stepOneTitle);
-    stepOneLayout->addStretch();
-    inputLayout->addLayout(stepOneLayout);
 
     diseaseWorkbookEdit_ = new QLineEdit(this);
     diseaseWorkbookEdit_->hide();
@@ -333,7 +306,7 @@ void AutoCadGui::setupUi() {
 
     auto* uploadBox = new QWidget(generatorCard);
     uploadBox->setObjectName("TaskFilePanel");
-    uploadBox->setFixedHeight(158);
+    uploadBox->setFixedHeight(112);
     uploadBox->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
     auto* uploadBoxLayout = new QVBoxLayout(uploadBox);
     uploadBoxLayout->setContentsMargins(0, 0, 0, 0);
@@ -347,13 +320,13 @@ void AutoCadGui::setupUi() {
     uploadPromptPage->setObjectName("UploadPromptPage");
     uploadPromptPage->setCursor(Qt::PointingHandCursor);
     auto* promptLayout = new QVBoxLayout(uploadPromptPage);
-    promptLayout->setContentsMargins(22, 24, 22, 24);
-    promptLayout->setSpacing(10);
+    promptLayout->setContentsMargins(20, 12, 20, 12);
+    promptLayout->setSpacing(4);
 
-    auto* cloudIcon = new QLabel("↥", uploadPromptPage);
+    auto* cloudIcon = new QLabel("▦", uploadPromptPage);
     cloudIcon->setObjectName("UploadIcon");
     cloudIcon->setAlignment(Qt::AlignCenter);
-    cloudIcon->setFixedSize(58, 58);
+    cloudIcon->setFixedSize(44, 44);
     auto* uploadHint = new QLabel("拖拽外观病害 Excel 到此处，或者 点击上传", uploadPromptPage);
     uploadHint->setObjectName("UploadTitle");
     uploadHint->setAlignment(Qt::AlignCenter);
@@ -371,136 +344,31 @@ void AutoCadGui::setupUi() {
     auto* selectedFilesPage = new QWidget(uploadStack_);
     selectedFilesPage->setObjectName("SelectedFilesPage");
     auto* selectedPageLayout = new QVBoxLayout(selectedFilesPage);
-    selectedPageLayout->setContentsMargins(18, 16, 18, 16);
-    selectedPageLayout->setSpacing(12);
-
-    auto* selectedHeaderLayout = new QHBoxLayout();
-    selectedHeaderLayout->setSpacing(10);
-    auto* selectedTitle = new QLabel("本次任务文件", selectedFilesPage);
-    selectedTitle->setObjectName("SelectedFilesTitle");
-    auto* selectedHint = new QLabel("外观病害 Excel 是本次生成任务的主输入", selectedFilesPage);
-    selectedHint->setObjectName("UploadHint");
-    auto* addFileButton = new QPushButton("重新选择", selectedFilesPage);
-    addFileButton->setObjectName("SmallActionButton");
-    addFileButton->setFixedHeight(32);
-    addFileButton->setCursor(Qt::PointingHandCursor);
-    selectedHeaderLayout->addWidget(selectedTitle);
-    selectedHeaderLayout->addWidget(selectedHint);
-    selectedHeaderLayout->addStretch();
-    selectedHeaderLayout->addWidget(addFileButton);
-    selectedPageLayout->addLayout(selectedHeaderLayout);
+    selectedPageLayout->setContentsMargins(0, 12, 0, 12);
+    selectedPageLayout->setSpacing(0);
 
     selectedFilesLayout_ = new QVBoxLayout();
-    selectedFilesLayout_->setSpacing(10);
+    selectedFilesLayout_->setSpacing(0);
     selectedPageLayout->addLayout(selectedFilesLayout_);
-    selectedPageLayout->addStretch(1);
-    connect(addFileButton, &QPushButton::clicked, this, &AutoCadGui::chooseProjectFiles);
     uploadStack_->addWidget(selectedFilesPage);
 
     inputLayout->addWidget(uploadBox);
     generatorLayout->addLayout(inputLayout);
+    leftColumnLayout->addWidget(generatorCard);
 
     auto* outputLayout = new QVBoxLayout();
-    outputLayout->setContentsMargins(22, 0, 22, 0);
-    outputLayout->setSpacing(14);
-    auto* stepTwoLayout = new QHBoxLayout();
-    stepTwoLayout->setSpacing(12);
-    auto* stepTwo = new QLabel("2", generatorCard);
-    stepTwo->setObjectName("StepNumber");
-    stepTwo->setAlignment(Qt::AlignCenter);
-    stepTwo->setFixedSize(30, 30);
-    auto* stepTwoTitle = new QLabel("基础数据源与输出配置", generatorCard);
-    stepTwoTitle->setObjectName("SectionTitle");
-    stepTwoLayout->addWidget(stepTwo);
-    stepTwoLayout->addWidget(stepTwoTitle);
-    stepTwoLayout->addStretch();
-    outputLayout->addLayout(stepTwoLayout);
+    outputLayout->setContentsMargins(0, 0, 0, 0);
+    outputLayout->setSpacing(0);
     auto* configGridLayout = new QHBoxLayout();
-    configGridLayout->setSpacing(14);
-    configGridLayout->addWidget(createBoardLengthDataSourceCard(), 2);
+    configGridLayout->setSpacing(24);
+    configGridLayout->addWidget(createBoardLengthDataSourceCard(), 1);
     configGridLayout->addWidget(createOutputDirectoryCard(), 1);
     outputLayout->addLayout(configGridLayout);
-    generatorLayout->addLayout(outputLayout);
+    leftColumnLayout->addLayout(outputLayout);
+    mainLayout->addWidget(leftColumn, 1, Qt::AlignTop);
 
-    auto* actionLayout = new QHBoxLayout();
-    actionLayout->setContentsMargins(22, 2, 22, 22);
-    actionLayout->setSpacing(12);
-    startButton_ = new QPushButton("开始生成", this);
-    startButton_->setObjectName("PrimaryButton");
-    startButton_->setFixedHeight(56);
-    startButton_->setCursor(Qt::PointingHandCursor);
-
-    cancelButton_ = new QPushButton("取消", this);
-    cancelButton_->setObjectName("SecondaryButton");
-    cancelButton_->setFixedHeight(42);
-    cancelButton_->setCursor(Qt::PointingHandCursor);
-    cancelButton_->setEnabled(false);
-
-    openOutputButton_ = new QPushButton("打开输出目录", this);
-    openOutputButton_->setObjectName("SecondaryButton");
-    openOutputButton_->setFixedHeight(42);
-    openOutputButton_->setCursor(Qt::PointingHandCursor);
-
-    actionLayout->addWidget(startButton_, 1);
-    actionLayout->addWidget(cancelButton_);
-    actionLayout->addWidget(openOutputButton_);
-    generatorLayout->addLayout(actionLayout);
-    mainLayout->addWidget(generatorCard, 1);
-
-    auto* queueCard = new QWidget(this);
-    queueCard->setObjectName("QueueCard");
-    queueCard->setFixedWidth(308);
-    auto* queueLayout = new QVBoxLayout(queueCard);
-    queueLayout->setContentsMargins(16, 18, 16, 18);
-    queueLayout->setSpacing(12);
-
-    auto* queueHeader = new QHBoxLayout();
-    queueHeader->setContentsMargins(0, 0, 0, 0);
-    auto* queueTitle = new QLabel("生成任务队列", queueCard);
-    queueTitle->setObjectName("QueueTitle");
-    auto* taskCount = new QLabel("4 步", queueCard);
-    taskCount->setObjectName("TaskCount");
-    taskCount->setAlignment(Qt::AlignCenter);
-    taskCount->setFixedHeight(28);
-    queueHeader->addWidget(queueTitle);
-    queueHeader->addStretch();
-    queueHeader->addWidget(taskCount);
-    queueLayout->addLayout(queueHeader);
-
-    statusLabel_ = new QLabel("待运行", queueCard);
-    statusLabel_->setObjectName("StatusText");
-    progressBar_ = new QProgressBar(queueCard);
-    progressBar_->setObjectName("MainProgress");
-    progressBar_->setTextVisible(false);
-    progressBar_->setRange(0, 1);
-    progressBar_->setValue(0);
-    progressBar_->setFixedHeight(8);
-
-    outputSummaryLabel_ = new QLabel("等待开始生成", queueCard);
-    outputSummaryLabel_->setObjectName("OutputSummary");
-    outputSummaryLabel_->setWordWrap(true);
-
-    queueLayout->addWidget(createTaskCard("当前批量任务", "按病害数据表批量生成 DXF", "等待中"));
-    queueLayout->addWidget(createTaskCard("生成进度", "提取符号、识别数据表、匹配基础数据源、批量写入 DXF", "待启动", 0));
-    queueLayout->addWidget(outputSummaryLabel_);
-
-    const QStringList steps = {
-        "提取病害符号",
-        "识别病害数据表",
-        "匹配基础数据源",
-        "批量生成 DXF"
-    };
-    for (const QString& step : steps) {
-        auto* label = new QLabel(step, queueCard);
-        label->setObjectName("StepPill");
-        label->setProperty("state", "pending");
-        label->setFixedHeight(34);
-        label->setAlignment(Qt::AlignVCenter | Qt::AlignLeft);
-        stepLabels_.push_back(label);
-        queueLayout->addWidget(label);
-    }
-    queueLayout->addStretch();
-    mainLayout->addWidget(queueCard, 0);
+    auto* generationControlCard = createGenerationControlCard();
+    mainLayout->addWidget(generationControlCard, 0, Qt::AlignTop);
 
     connect(startButton_, &QPushButton::clicked, this, [this]() {
         ensureLogDialog();
@@ -521,6 +389,125 @@ void AutoCadGui::setupUi() {
     connect(tenderNavButton_, &QPushButton::clicked, this, [this]() { setActiveModule(1); });
     connect(aiSettingsNavButton_, &QPushButton::clicked, this, [this]() { setActiveModule(2); });
     setActiveModule(0);
+}
+
+QWidget* AutoCadGui::createGenerationControlCard() {
+    auto* card = new QWidget(this);
+    card->setObjectName("GenerationControlCard");
+    AntDesignStyle::applyCardShadow(card);
+    card->setFixedWidth(440);
+    card->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Fixed);
+
+    auto* layout = new QVBoxLayout(card);
+    layout->setContentsMargins(24, 24, 24, 24);
+    layout->setSpacing(14);
+
+    auto* header = new QHBoxLayout();
+    header->setContentsMargins(0, 0, 0, 0);
+    auto* title = new QLabel("生成控制", card);
+    title->setObjectName("GenerationTitle");
+    generationStatusBadge_ = new QLabel("待检查", card);
+    generationStatusBadge_->setObjectName("GenerationStatusBadge");
+    generationStatusBadge_->setProperty("state", "pending");
+    generationStatusBadge_->setAlignment(Qt::AlignCenter);
+    generationStatusBadge_->setFixedHeight(26);
+    generationStatusBadge_->setMinimumWidth(70);
+    header->addWidget(title);
+    header->addStretch();
+    header->addWidget(generationStatusBadge_);
+    layout->addLayout(header);
+
+    auto* checkTitle = new QLabel("生成前检查", card);
+    checkTitle->setObjectName("GenerationSectionTitle");
+    layout->addWidget(checkTitle);
+    layout->addWidget(createGenerationCheckRow(&checkWorkbookIconLabel_, &checkWorkbookTextLabel_));
+    layout->addWidget(createGenerationCheckRow(&checkBoardSourceIconLabel_, &checkBoardSourceTextLabel_));
+    layout->addWidget(createGenerationCheckRow(&checkOutputIconLabel_, &checkOutputTextLabel_));
+    layout->addWidget(createGenerationCheckRow(&checkBackendIconLabel_, &checkBackendTextLabel_));
+
+    auto* compactNote = new QLabel("配置项在左侧维护，这里只显示是否满足生成条件。", card);
+    compactNote->setObjectName("GenerationCompactNote");
+    compactNote->setWordWrap(true);
+    layout->addWidget(compactNote);
+
+    statusLabel_ = new QLabel("等待开始生成", card);
+    statusLabel_->setObjectName("GenerationRuntimeText");
+    statusLabel_->setWordWrap(true);
+    statusLabel_->hide();
+    layout->addWidget(statusLabel_);
+
+    progressBar_ = new QProgressBar(card);
+    progressBar_->setObjectName("MainProgress");
+    progressBar_->setTextVisible(false);
+    progressBar_->setRange(0, 1);
+    progressBar_->setValue(0);
+    progressBar_->setFixedHeight(8);
+    progressBar_->hide();
+    layout->addWidget(progressBar_);
+
+    outputSummaryLabel_ = new QLabel("生成结束后显示结果摘要", card);
+    outputSummaryLabel_->setObjectName("OutputSummary");
+    outputSummaryLabel_->setWordWrap(true);
+    outputSummaryLabel_->hide();
+    layout->addWidget(outputSummaryLabel_);
+
+    startButton_ = new AntPrimaryButton("▷  开始生成", card);
+    startButton_->setObjectName("QueuePrimaryButton");
+    startButton_->setFixedHeight(58);
+    startButton_->setCursor(Qt::PointingHandCursor);
+    layout->addWidget(startButton_);
+
+    auto* secondaryActions = new QHBoxLayout();
+    secondaryActions->setSpacing(10);
+    cancelButton_ = new QPushButton("取消生成", card);
+    cancelButton_->setObjectName("SecondaryButton");
+    cancelButton_->setFixedHeight(36);
+    cancelButton_->setCursor(Qt::PointingHandCursor);
+    cancelButton_->setEnabled(false);
+    openOutputButton_ = new QPushButton("打开输出目录", card);
+    openOutputButton_->setObjectName("SecondaryButton");
+    openOutputButton_->setFixedHeight(36);
+    openOutputButton_->setCursor(Qt::PointingHandCursor);
+    secondaryActions->addWidget(cancelButton_, 1);
+    secondaryActions->addWidget(openOutputButton_, 1);
+    cancelButton_->hide();
+    openOutputButton_->hide();
+    layout->addLayout(secondaryActions);
+
+    updateGenerationPanel();
+    return card;
+}
+
+QWidget* AutoCadGui::createGenerationCheckRow(QLabel** iconLabel, QLabel** textLabel) {
+    auto* row = new QWidget(this);
+    row->setObjectName("GenerationCheckRow");
+    row->setFixedHeight(42);
+
+    auto* layout = new QHBoxLayout(row);
+    layout->setContentsMargins(12, 0, 12, 0);
+    layout->setSpacing(12);
+
+    auto* icon = new QLabel("-", row);
+    icon->setObjectName("GenerationCheckIcon");
+    icon->setProperty("state", "pending");
+    icon->setAlignment(Qt::AlignCenter);
+    icon->setFixedSize(24, 24);
+
+    auto* text = new QLabel("待检查", row);
+    text->setObjectName("GenerationCheckText");
+    text->setProperty("state", "pending");
+    text->setAlignment(Qt::AlignVCenter | Qt::AlignLeft);
+
+    layout->addWidget(icon);
+    layout->addWidget(text, 1);
+
+    if (iconLabel) {
+        *iconLabel = icon;
+    }
+    if (textLabel) {
+        *textLabel = text;
+    }
+    return row;
 }
 
 QWidget* AutoCadGui::createTenderGenerationPage() {
@@ -631,7 +618,7 @@ QWidget* AutoCadGui::createTenderGenerationPage() {
     configLayout->addWidget(createOptionRow("AI 内容占位", "每个章节保留 AI 生成内容入口"));
     auto* actionLayout = new QHBoxLayout();
     actionLayout->setSpacing(12);
-    auto* generateButton = new QPushButton("生成 Word 框架", configCard);
+    auto* generateButton = new AntPrimaryButton("生成 Word 框架", configCard);
     generateButton->setObjectName("PrimaryButton");
     generateButton->setFixedHeight(42);
     generateButton->setCursor(Qt::PointingHandCursor);
@@ -709,115 +696,220 @@ QWidget* AutoCadGui::createAiSettingsPage() {
     page->setObjectName("ModulePage");
     auto* pageLayout = new QHBoxLayout(page);
     pageLayout->setContentsMargins(0, 0, 0, 0);
-    pageLayout->setSpacing(24);
+    pageLayout->setSpacing(30);
 
-    auto* apiCard = createModuleCard("1 API Key 与模型", "密钥仅保存在本机配置中，界面默认以掩码显示。");
-    apiCard->setFixedWidth(360);
-    auto* apiLayout = qobject_cast<QVBoxLayout*>(apiCard->layout());
-    apiLayout->addWidget(createBodyText("服务商", "FieldTitle"));
-    apiLayout->addWidget(createSettingsInput("OpenAI / 兼容接口"));
-    apiLayout->addWidget(createBodyText("API Base URL", "FieldTitle"));
-    apiLayout->addWidget(createSettingsInput("https://api.openai.com/v1"));
-    apiLayout->addWidget(createBodyText("API Key", "FieldTitle"));
-    apiLayout->addWidget(createSettingsInput("sk-...", true));
-    apiLayout->addWidget(createBodyText("默认模型", "FieldTitle"));
-    apiLayout->addWidget(createSettingsInput("gpt-4.1 / deepseek-chat / 自定义"));
-    auto* apiActions = new QHBoxLayout();
-    apiActions->setSpacing(12);
-    auto* testButton = new QPushButton("测试连接", apiCard);
-    testButton->setObjectName("PrimaryButton");
-    testButton->setFixedHeight(42);
-    auto* saveButton = new QPushButton("保存设置", apiCard);
-    saveButton->setObjectName("SecondaryButton");
-    saveButton->setFixedHeight(42);
-    apiActions->addWidget(testButton);
-    apiActions->addWidget(saveButton);
-    apiLayout->addLayout(apiActions);
-    auto* statusBox = new QWidget(apiCard);
-    statusBox->setObjectName("SuccessNotice");
-    auto* statusLayout = new QVBoxLayout(statusBox);
-    statusLayout->setContentsMargins(14, 10, 14, 10);
-    statusLayout->setSpacing(4);
-    statusLayout->addWidget(createBodyText("连接状态：待测试", "SuccessTitle"));
-    statusLayout->addWidget(createBodyText("测试成功后才能启用 AI 内容生成。", "MutedText"));
-    apiLayout->addWidget(statusBox);
+    const auto createAiCard = [page](const QString& iconText, const QString& title, const QString& tone) {
+        auto* card = new QWidget(page);
+        card->setObjectName("AiSettingsCard");
+        AntDesignStyle::applyCardShadow(card);
+        card->setMinimumWidth(300);
+
+        auto* layout = new QVBoxLayout(card);
+        layout->setContentsMargins(26, 28, 26, 26);
+        layout->setSpacing(18);
+
+        auto* header = new QHBoxLayout();
+        header->setSpacing(12);
+        auto* icon = new QLabel(iconText, card);
+        icon->setObjectName("AiCardIcon");
+        icon->setProperty("tone", tone);
+        icon->setAlignment(Qt::AlignCenter);
+        icon->setFixedSize(26, 26);
+        auto* titleLabel = new QLabel(title, card);
+        titleLabel->setObjectName("AiCardTitle");
+        header->addWidget(icon);
+        header->addWidget(titleLabel, 1);
+        layout->addLayout(header);
+
+        auto* divider = new QFrame(card);
+        divider->setObjectName("AiCardDivider");
+        divider->setFixedHeight(1);
+        layout->addWidget(divider);
+        return QPair<QWidget*, QVBoxLayout*>(card, layout);
+    };
+
+    const auto addFieldLabel = [](QVBoxLayout* layout, QWidget* parent, const QString& text) {
+        auto* label = new QLabel(text, parent);
+        label->setObjectName("AiFieldLabel");
+        layout->addWidget(label);
+        return label;
+    };
+
+    auto apiPair = createAiCard("▣", "API Key 与模型", "blue");
+    auto* apiCard = apiPair.first;
+    auto* apiLayout = apiPair.second;
+    apiLayout->addSpacing(14);
+    addFieldLabel(apiLayout, apiCard, "服务商");
+    auto* serviceCombo = new QComboBox(apiCard);
+    serviceCombo->setObjectName("AiComboBox");
+    serviceCombo->addItem("OpenAI");
+    serviceCombo->addItem("兼容接口");
+    serviceCombo->setFixedHeight(46);
+    apiLayout->addWidget(serviceCombo);
+    addFieldLabel(apiLayout, apiCard, "API Base URL");
+    auto* baseUrlInput = createSettingsInput(QString());
+    baseUrlInput->setText("https://api.openai.com/v1");
+    apiLayout->addWidget(baseUrlInput);
+    addFieldLabel(apiLayout, apiCard, "API Key");
+    auto* keyInput = createSettingsInput(QString(), true);
+    keyInput->setText("sk-placeholder-key");
+    keyInput->addAction(style()->standardIcon(QStyle::SP_DialogYesButton), QLineEdit::LeadingPosition);
+    apiLayout->addWidget(keyInput);
+    addFieldLabel(apiLayout, apiCard, "默认模型");
+    auto* modelInput = createSettingsInput(QString());
+    modelInput->setText("gpt-4o");
+    apiLayout->addWidget(modelInput);
     apiLayout->addStretch();
+    auto* apiFooter = new QHBoxLayout();
+    apiFooter->setSpacing(10);
+    auto* statusBadge = new QLabel("●  状态：待测试", apiCard);
+    statusBadge->setObjectName("AiStatusBadge");
+    statusBadge->setAlignment(Qt::AlignCenter);
+    statusBadge->setFixedHeight(34);
+    auto* testButton = new QPushButton("测试连接", apiCard);
+    testButton->setObjectName("AiGhostButton");
+    testButton->setFixedHeight(42);
+    auto* saveButton = new AntPrimaryButton("▣  保存", apiCard);
+    saveButton->setObjectName("AiBlueButton");
+    saveButton->setFixedHeight(42);
+    apiFooter->addWidget(statusBadge);
+    apiFooter->addStretch();
+    apiFooter->addWidget(testButton);
+    apiFooter->addWidget(saveButton);
+    apiLayout->addLayout(apiFooter);
 
-    auto* promptCard = createModuleCard("2 自定义提示词", "提示词支持变量，可按章节生成内容并写入标书框架。");
-    auto* promptLayout = qobject_cast<QVBoxLayout*>(promptCard->layout());
-    auto* tabRow = new QHBoxLayout();
-    tabRow->setSpacing(8);
+    auto promptPair = createAiCard("⌘", "自定义提示词", "purple");
+    auto* promptCard = promptPair.first;
+    auto* promptLayout = promptPair.second;
+    auto* tabBar = new QWidget(promptCard);
+    tabBar->setObjectName("PromptTabBar");
+    tabBar->setFixedHeight(50);
+    auto* tabRow = new QHBoxLayout(tabBar);
+    tabRow->setContentsMargins(4, 4, 4, 4);
+    tabRow->setSpacing(6);
     for (const QString& tab : {"技术方案", "商务响应", "评分响应"}) {
-        auto* button = new QPushButton(tab, promptCard);
-        button->setObjectName(tab == "技术方案" ? "PrimaryButton" : "SecondaryButton");
-        button->setFixedHeight(36);
-        tabRow->addWidget(button);
+        auto* button = new QPushButton(tab, tabBar);
+        button->setObjectName(tab == "商务响应" ? "PromptTabActive" : "PromptTab");
+        button->setFixedHeight(42);
+        tabRow->addWidget(button, 1);
     }
-    tabRow->addStretch();
-    promptLayout->addLayout(tabRow);
-    auto* promptEditor = new QTextEdit(promptCard);
+    promptLayout->addWidget(tabBar);
+
+    auto* promptEditorBox = new QWidget(promptCard);
+    promptEditorBox->setObjectName("PromptEditorBox");
+    auto* editorBoxLayout = new QVBoxLayout(promptEditorBox);
+    editorBoxLayout->setContentsMargins(0, 0, 0, 0);
+    editorBoxLayout->setSpacing(0);
+    auto* promptEditor = new QTextEdit(promptEditorBox);
     promptEditor->setObjectName("PromptEditor");
-    promptEditor->setFixedHeight(240);
+    promptEditor->setFixedHeight(196);
     promptEditor->setPlainText(
         "你是资深投标文件编制专家。\n"
-        "请基于 {招标文件摘要}、{章节名称}、{评分标准}\n"
+        "请基于 {招标文件摘要}、{章节名称}、\n"
+        "{评分标准}\n"
         "生成符合招标要求的技术响应内容。\n"
-        "要求：结构清晰、避免夸大、可直接写入 Word。");
-    promptLayout->addWidget(promptEditor);
-    promptLayout->addWidget(createBodyText("可用变量", "MiniSectionTitle"));
-    auto* variableRow = new QHBoxLayout();
-    variableRow->setSpacing(8);
+        "要求：结构清晰、避免夸大、可直接写入\n"
+        "Word。");
+    editorBoxLayout->addWidget(promptEditor);
+    auto* variablesPanel = new QWidget(promptEditorBox);
+    variablesPanel->setObjectName("PromptVariablePanel");
+    auto* variablesLayout = new QVBoxLayout(variablesPanel);
+    variablesLayout->setContentsMargins(16, 12, 16, 14);
+    variablesLayout->setSpacing(8);
+    auto* variableTitle = new QLabel("可用变量", variablesPanel);
+    variableTitle->setObjectName("AiSmallLabel");
+    variablesLayout->addWidget(variableTitle);
+    auto* variableRow1 = new QHBoxLayout();
+    variableRow1->setSpacing(8);
+    auto* variableRow2 = new QHBoxLayout();
+    variableRow2->setSpacing(8);
+    int variableIndex = 0;
     for (const QString& variable : {"{招标文件摘要}", "{章节名称}", "{评分标准}", "{项目类型}"}) {
-        auto* chip = new QLabel(variable, promptCard);
+        auto* chip = new QLabel(variable, variablesPanel);
         chip->setObjectName("VariableChip");
         chip->setAlignment(Qt::AlignCenter);
-        chip->setFixedHeight(30);
-        variableRow->addWidget(chip);
+        chip->setFixedHeight(32);
+        (variableIndex < 3 ? variableRow1 : variableRow2)->addWidget(chip);
+        ++variableIndex;
     }
-    variableRow->addStretch();
-    promptLayout->addLayout(variableRow);
+    variableRow1->addStretch();
+    variableRow2->addStretch();
+    variablesLayout->addLayout(variableRow1);
+    variablesLayout->addLayout(variableRow2);
+    editorBoxLayout->addWidget(variablesPanel);
+    promptLayout->addWidget(promptEditorBox, 1);
     auto* promptActions = new QHBoxLayout();
-    promptActions->setSpacing(12);
-    auto* previewButton = new QPushButton("预览生成内容", promptCard);
-    previewButton->setObjectName("PrimaryButton");
-    previewButton->setFixedHeight(42);
-    auto* applyButton = new QPushButton("应用到标书章节", promptCard);
-    applyButton->setObjectName("SecondaryButton");
-    applyButton->setFixedHeight(42);
+    promptActions->setSpacing(10);
+    promptActions->addStretch();
+    auto* previewButton = new QPushButton("▷  预览生成", promptCard);
+    previewButton->setObjectName("AiGhostButton");
+    previewButton->setFixedHeight(46);
+    auto* applyButton = new AntPrimaryButton("应用到标书章节", promptCard);
+    applyButton->setObjectName("AiPurpleButton");
+    applyButton->setAccentColor(QColor("#722ed1"));
+    applyButton->setFixedHeight(46);
     promptActions->addWidget(previewButton);
     promptActions->addWidget(applyButton);
-    promptActions->addStretch();
     promptLayout->addLayout(promptActions);
 
-    auto* flowCard = createModuleCard("3 应用到 Word 框架", "AI 内容先进入候选区，由用户确认后写入对应章节。");
-    flowCard->setFixedWidth(330);
-    auto* flowLayout = qobject_cast<QVBoxLayout*>(flowCard->layout());
-    flowLayout->addWidget(createFlowStep(1, "读取招标文件摘要", "来自标书解析结果"));
-    flowLayout->addWidget(createFlowStep(2, "选择 Word 章节", "例如：施工组织设计"));
-    flowLayout->addWidget(createFlowStep(3, "套用提示词生成内容", "调用用户配置的模型", true));
-    flowLayout->addWidget(createFlowStep(4, "进入候选内容区", "用户编辑、确认、替换"));
-    flowLayout->addWidget(createFlowStep(5, "写入 Word 框架", "生成 docx 或更新章节"));
+    auto flowPair = createAiCard("✓", "应用到 Word 框架", "teal");
+    auto* flowCard = flowPair.first;
+    auto* flowLayout = flowPair.second;
+    flowLayout->addSpacing(10);
+    const QVector<QPair<QString, QString>> flowSteps = {
+        {"✓", "读取招标文件摘要"},
+        {"✓", "选择 Word 章节"},
+        {"3", "套用提示词生成内容"},
+        {"4", "进入候选内容区"},
+        {"5", "写入 Word 框架"}
+    };
+    int flowIndex = 0;
+    for (const auto& step : flowSteps) {
+        auto* stepWidget = new QWidget(flowCard);
+        stepWidget->setObjectName("AiFlowStep");
+        auto* stepLayout = new QHBoxLayout(stepWidget);
+        stepLayout->setContentsMargins(0, 0, 0, 0);
+        stepLayout->setSpacing(14);
+        auto* number = new QLabel(step.first, stepWidget);
+        number->setObjectName("AiFlowNumber");
+        number->setProperty("state", flowIndex < 2 ? "done" : (flowIndex == 2 ? "active" : "pending"));
+        number->setAlignment(Qt::AlignCenter);
+        number->setFixedSize(flowIndex == 2 ? 38 : 34, flowIndex == 2 ? 38 : 34);
+        auto* text = new QLabel(step.second, stepWidget);
+        text->setObjectName("AiFlowText");
+        text->setProperty("state", flowIndex == 2 ? "active" : (flowIndex > 2 ? "pending" : "done"));
+        stepLayout->addWidget(number);
+        stepLayout->addWidget(text, 1);
+        flowLayout->addWidget(stepWidget);
+        flowLayout->addSpacing(flowIndex == 2 ? 10 : 6);
+        ++flowIndex;
+    }
+    flowLayout->addSpacing(10);
+    auto* candidateTitle = new QLabel("候选内容预览", flowCard);
+    candidateTitle->setObjectName("AiPreviewTitle");
+    flowLayout->addWidget(candidateTitle);
     auto* candidateBox = new QWidget(flowCard);
-    candidateBox->setObjectName("CandidateBox");
+    candidateBox->setObjectName("AiCandidateBox");
+    candidateBox->setFixedHeight(160);
     auto* candidateLayout = new QVBoxLayout(candidateBox);
-    candidateLayout->setContentsMargins(12, 12, 12, 12);
-    candidateLayout->setSpacing(6);
-    candidateLayout->addWidget(createBodyText("候选内容预览", "MiniSectionTitle"));
-    auto* candidateText = createBodyText("本章节将从项目理解、施工组织、质量安全、进度保障四个方面展开...", "MutedText");
+    candidateLayout->setContentsMargins(14, 14, 14, 14);
+    auto* candidateText = new QLabel("本章节将从项目理解、施工组织、质量安全、\n进度保障四个方面展开论述。针对本项目的地\n质特点，我们采用...", candidateBox);
+    candidateText->setObjectName("AiCandidateText");
     candidateText->setWordWrap(true);
     candidateLayout->addWidget(candidateText);
     flowLayout->addWidget(candidateBox);
     flowLayout->addStretch();
 
-    pageLayout->addWidget(apiCard);
+    pageLayout->addWidget(apiCard, 1);
     pageLayout->addWidget(promptCard, 1);
-    pageLayout->addWidget(flowCard);
+    pageLayout->addWidget(flowCard, 1);
     return page;
 }
 
 QWidget* AutoCadGui::createCard(const QString& title, QLayout* contentLayout) {
     auto* card = new QWidget(this);
     card->setObjectName("Card");
+    AntDesignStyle::applyCardShadow(card, 24, 6, 16);
 
     auto* layout = new QVBoxLayout(card);
     layout->setContentsMargins(18, 16, 18, 18);
@@ -837,6 +929,7 @@ QWidget* AutoCadGui::createCard(const QString& title, QLayout* contentLayout) {
 QWidget* AutoCadGui::createModuleCard(const QString& title, const QString& hint) {
     auto* card = new QWidget(this);
     card->setObjectName("ModuleCard");
+    AntDesignStyle::applyCardShadow(card);
     auto* layout = new QVBoxLayout(card);
     layout->setContentsMargins(20, 18, 20, 18);
     layout->setSpacing(14);
@@ -929,61 +1022,59 @@ QWidget* AutoCadGui::createFlowStep(int number, const QString& title, const QStr
 QWidget* AutoCadGui::createBoardLengthDataSourceCard() {
     auto* card = new QWidget(this);
     card->setObjectName("BoardLengthDataSourceCard");
-    card->setFixedHeight(174);
+    AntDesignStyle::applyCardShadow(card);
+    card->setFixedHeight(286);
     card->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
 
-    auto* layout = new QHBoxLayout(card);
-    layout->setContentsMargins(16, 16, 16, 16);
-    layout->setSpacing(16);
-
-    auto* icon = new QLabel("DATA", card);
-    icon->setObjectName("DataSourceIcon");
-    icon->setAlignment(Qt::AlignCenter);
-    icon->setFixedSize(48, 48);
-    layout->addWidget(icon, 0, Qt::AlignTop);
-
-    auto* textLayout = new QVBoxLayout();
-    textLayout->setSpacing(6);
+    auto* layout = new QVBoxLayout(card);
+    layout->setContentsMargins(24, 20, 24, 22);
+    layout->setSpacing(12);
 
     auto* titleRow = new QHBoxLayout();
-    titleRow->setSpacing(10);
+    titleRow->setSpacing(8);
+    auto* icon = new QLabel("⌘", card);
+    icon->setObjectName("MiniCardIcon");
+    icon->setAlignment(Qt::AlignCenter);
+    icon->setFixedSize(24, 24);
     auto* title = new QLabel("衬砌长度/板长数据源", card);
     title->setObjectName("DataSourceTitle");
-    titleRow->addWidget(title);
+    titleRow->addWidget(icon);
+    titleRow->addWidget(title, 1);
     boardLengthSourceStatusLabel_ = new QLabel("默认", card);
     boardLengthSourceStatusLabel_->setObjectName("DataSourceStatusChip");
     boardLengthSourceStatusLabel_->setProperty("state", "default");
     boardLengthSourceStatusLabel_->setAlignment(Qt::AlignCenter);
-    boardLengthSourceStatusLabel_->setFixedHeight(26);
-    boardLengthSourceStatusLabel_->setMinimumWidth(70);
+    boardLengthSourceStatusLabel_->setFixedHeight(22);
+    boardLengthSourceStatusLabel_->setMinimumWidth(48);
     titleRow->addWidget(boardLengthSourceStatusLabel_);
-    titleRow->addStretch();
-    textLayout->addLayout(titleRow);
+    layout->addLayout(titleRow);
 
     auto* description = new QLabel("基础数据源用于匹配病害数据表，不作为本次任务上传文件。", card);
     description->setObjectName("DataSourceDescription");
     description->setWordWrap(true);
-    textLayout->addWidget(description);
+    layout->addWidget(description);
+    layout->addStretch();
 
-    auto* currentRow = new QHBoxLayout();
-    currentRow->setSpacing(8);
-    auto* currentLabel = new QLabel("当前使用", card);
+    auto* pathBox = new QWidget(card);
+    pathBox->setObjectName("DataSourcePathBox");
+    pathBox->setFixedHeight(96);
+    auto* pathBoxLayout = new QVBoxLayout(pathBox);
+    pathBoxLayout->setContentsMargins(12, 8, 12, 8);
+    pathBoxLayout->setSpacing(4);
+    auto* currentLabel = new QLabel("当前使用目录", pathBox);
     currentLabel->setObjectName("DataSourceCurrentLabel");
-    boardLengthSourceNameLabel_ = new QLabel("未选择数据源", card);
+    boardLengthSourceNameLabel_ = new QLabel("未选择数据源", pathBox);
     boardLengthSourceNameLabel_->setObjectName("BoardLengthSourceName");
     boardLengthSourceNameLabel_->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Preferred);
-    currentRow->addWidget(currentLabel);
-    currentRow->addWidget(boardLengthSourceNameLabel_, 1);
-    textLayout->addLayout(currentRow);
-
-    boardLengthSourceMetaLabel_ = new QLabel("请选择板长分布表目录", card);
+    boardLengthSourceMetaLabel_ = new QLabel("请选择板长分布表目录", pathBox);
     boardLengthSourceMetaLabel_->setObjectName("BoardLengthSourceMeta");
     boardLengthSourceMetaLabel_->setWordWrap(true);
-    textLayout->addWidget(boardLengthSourceMetaLabel_);
+    pathBoxLayout->addWidget(currentLabel);
+    pathBoxLayout->addWidget(boardLengthSourceNameLabel_);
+    pathBoxLayout->addWidget(boardLengthSourceMetaLabel_);
+    layout->addWidget(pathBox);
 
-    layout->addLayout(textLayout, 1);
-
-    auto* buttonLayout = new QVBoxLayout();
+    auto* buttonLayout = new QHBoxLayout();
     buttonLayout->setSpacing(8);
     auto* changeButton = new QPushButton("更换数据源", card);
     changeButton->setObjectName("ChangeDataSourceButton");
@@ -993,9 +1084,8 @@ QWidget* AutoCadGui::createBoardLengthDataSourceCard() {
     defaultButton->setObjectName("DefaultSourceButton");
     defaultButton->setFixedHeight(34);
     defaultButton->setCursor(Qt::PointingHandCursor);
-    buttonLayout->addWidget(changeButton);
+    buttonLayout->addWidget(changeButton, 1);
     buttonLayout->addWidget(defaultButton);
-    buttonLayout->addStretch();
     layout->addLayout(buttonLayout);
 
     connect(changeButton, &QPushButton::clicked, this, &AutoCadGui::chooseBoardLengthSource);
@@ -1007,41 +1097,62 @@ QWidget* AutoCadGui::createBoardLengthDataSourceCard() {
 QWidget* AutoCadGui::createOutputDirectoryCard() {
     auto* card = new QWidget(this);
     card->setObjectName("OutputPathCard");
-    card->setFixedHeight(174);
+    AntDesignStyle::applyCardShadow(card);
+    card->setFixedHeight(286);
     card->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
 
     auto* layout = new QVBoxLayout(card);
-    layout->setContentsMargins(16, 14, 16, 14);
-    layout->setSpacing(10);
+    layout->setContentsMargins(24, 20, 24, 22);
+    layout->setSpacing(12);
 
-    auto* title = new QLabel("输出目录", card);
+    auto* titleRow = new QHBoxLayout();
+    titleRow->setSpacing(8);
+    auto* icon = new QLabel("□", card);
+    icon->setObjectName("MiniCardIcon");
+    icon->setAlignment(Qt::AlignCenter);
+    icon->setFixedSize(24, 24);
+    auto* title = new QLabel("批量输出目录", card);
     title->setObjectName("OutputPathTitle");
+    titleRow->addWidget(icon);
+    titleRow->addWidget(title, 1);
+    layout->addLayout(titleRow);
+
     auto* hint = new QLabel("生成的 DXF、JSON 和日志文件将写入此目录", card);
     hint->setObjectName("OutputPathHint");
     hint->setWordWrap(true);
-    layout->addWidget(title);
     layout->addWidget(hint);
+    layout->addStretch();
 
-    auto* row = new QHBoxLayout();
-    row->setSpacing(12);
+    auto* pathBox = new QWidget(card);
+    pathBox->setObjectName("DataSourcePathBox");
+    pathBox->setFixedHeight(76);
+    auto* pathBoxLayout = new QVBoxLayout(pathBox);
+    pathBoxLayout->setContentsMargins(12, 8, 12, 8);
+    pathBoxLayout->setSpacing(5);
+    auto* currentLabel = new QLabel("当前输出路径", pathBox);
+    currentLabel->setObjectName("DataSourceCurrentLabel");
     outputDirEdit_ = new QLineEdit(card);
     outputDirEdit_->setObjectName("PathEdit");
-    outputDirEdit_->setFixedHeight(40);
-    auto* button = new QPushButton(card);
-    button->setObjectName("IconButton");
-    button->setFixedSize(40, 40);
+    outputDirEdit_->setFixedHeight(34);
+    connect(outputDirEdit_, &QLineEdit::textChanged, this, [this]() {
+        updateGenerationPanel();
+    });
+    pathBoxLayout->addWidget(currentLabel);
+    pathBoxLayout->addWidget(outputDirEdit_);
+    layout->addWidget(pathBox);
+
+    auto* button = new QPushButton("更改输出目录", card);
+    button->setObjectName("ChangeDataSourceButton");
+    button->setFixedHeight(34);
     button->setCursor(Qt::PointingHandCursor);
-    button->setIcon(style()->standardIcon(QStyle::SP_DirOpenIcon));
     connect(button, &QPushButton::clicked, this, [this]() {
         const QString path = QFileDialog::getExistingDirectory(this, "选择输出目录", outputDirEdit_->text());
         if (!path.isEmpty()) {
             outputDirEdit_->setText(QDir::toNativeSeparators(path));
+            updateGenerationPanel();
         }
     });
-
-    row->addWidget(outputDirEdit_, 1);
-    row->addWidget(button);
-    layout->addLayout(row);
+    layout->addWidget(button);
 
     return card;
 }
@@ -1116,8 +1227,8 @@ QHBoxLayout* AutoCadGui::createPathRow(
 void AutoCadGui::applyStyles() {
     setStyleSheet(R"(
         QWidget {
-            background: #eef2f7;
-            color: #1b2733;
+            background: #f8fafc;
+            color: #1e293b;
             font-family: "Microsoft YaHei UI", "Segoe UI";
             font-size: 13px;
         }
@@ -1125,98 +1236,67 @@ void AutoCadGui::applyStyles() {
             background: transparent;
         }
         QWidget#AppShell {
-            background: #f3f6fb;
-        }
-        QWidget#Sidebar {
-            background: #101827;
-            border: none;
+            background: qlineargradient(x1:0, y1:0, x2:1, y2:1,
+                stop:0 #f4edff, stop:0.48 #f8fafc, stop:1 #eefdfa);
         }
         QWidget#Workspace,
+        QWidget#LeftWorkflowColumn {
+            background: transparent;
+            border: none;
+        }
         QWidget#CadDashboard {
-            background: #f3f6fb;
+            background: qlineargradient(x1:0, y1:0, x2:1, y2:1,
+                stop:0 #f4edff, stop:0.48 #f8fafc, stop:1 #eefdfa);
             border: none;
-        }
-        QWidget#HeaderBar {
-            background: #ffffff;
-            border: 1px solid #dde7f3;
-            border-radius: 16px;
-        }
-        QScrollArea#ContentScroll {
-            background: transparent;
-            border: none;
-        }
-        QScrollArea#ContentScroll > QWidget > QWidget {
-            background: transparent;
         }
         QWidget#TopBar {
             background: #ffffff;
             border: none;
-            border-bottom: 1px solid #dce5f1;
+            border-bottom: 1px solid #e2e8f0;
         }
         QLabel#BrandIcon {
-            background: #38bdf8;
+            background: #2563eb;
             border-radius: 12px;
-            color: #082f49;
-            font-size: 10px;
+            color: #ffffff;
+            font-size: 20px;
             font-weight: 800;
         }
         QLabel#BrandText {
-            color: #f8fafc;
-            font-size: 21px;
+            color: #0f172a;
+            font-size: 25px;
             font-weight: 800;
-        }
-        QLabel#SidebarLabel {
-            color: #8090a7;
-            font-size: 12px;
-            font-weight: 700;
-            padding-left: 4px;
-        }
-        QWidget#SidebarStatus {
-            background: #172033;
-            border: 1px solid #25324a;
-            border-radius: 14px;
-        }
-        QLabel#SidebarStatusTitle {
-            color: #f8fafc;
-            font-weight: 700;
-        }
-        QLabel#SidebarStatusHint {
-            color: #a8b5c7;
-            font-size: 12px;
-            line-height: 18px;
         }
         QPushButton#NavButton,
         QPushButton#ActiveNavButton {
             border: none;
             border-radius: 12px;
-            padding: 0 14px;
-            font-size: 14px;
-            text-align: left;
+            padding: 0 18px;
+            font-size: 16px;
         }
         QPushButton#NavButton {
             background: transparent;
-            color: #cbd5e1;
+            color: #475569;
         }
         QPushButton#NavButton:hover {
-            background: #1c273a;
-            color: #ffffff;
+            background: #f1f5f9;
+            color: #0f172a;
         }
         QPushButton#ActiveNavButton {
-            background: #2563eb;
-            color: #ffffff;
-            font-weight: 700;
+            background: #eff6ff;
+            color: #1d4ed8;
+            font-weight: 600;
         }
         QLineEdit#SearchEdit {
-            background: #f1f5f9;
-            border: 1px solid #eef2f7;
-            border-radius: 12px;
-            padding: 0 14px;
-            color: #23344f;
-            font-size: 14px;
+            background: #f8fafc;
+            border: 1px solid transparent;
+            border-radius: 21px;
+            padding: 0 16px;
+            color: #334155;
+            font-size: 16px;
         }
         QLineEdit#SearchEdit:focus {
             background: #ffffff;
-            border-color: #93b4f5;
+            border-color: #93c5fd;
         }
         QPushButton#NotificationButton {
             background: transparent;
@@ -1234,10 +1314,10 @@ void AutoCadGui::applyStyles() {
             border: none;
         }
         QLabel#UserAvatar {
-            background: #eaf2ff;
-            border-radius: 20px;
+            background: #dbeafe;
+            border-radius: 17px;
             color: #1d4ed8;
-            font-size: 14px;
+            font-size: 13px;
             font-weight: 800;
         }
         QWidget#Header {
@@ -1249,33 +1329,30 @@ void AutoCadGui::applyStyles() {
             background: transparent;
         }
         QLabel#PageTitle {
+            font-size: 28px;
+            font-weight: 800;
+            color: #0f172a;
+        }
+        QLabel#PageTitleIcon {
+            color: #2563eb;
             font-size: 24px;
-            font-weight: 600;
-            color: #132033;
+            font-weight: 900;
+        }
+        QLabel#PageTitleIcon[tone="ai"] {
+            color: #a855f7;
+        }
+        QLabel#PageTitleIcon[tone="word"] {
+            color: #6366f1;
         }
         QLabel#PageSubtitle {
-            font-size: 13px;
-            color: #6b7788;
+            font-size: 16px;
+            color: #52678a;
         }
         QWidget#GeneratorCard,
         QWidget#QueueCard {
             background: #ffffff;
-            border: 1px solid #dce5f1;
-            border-radius: 18px;
-        }
-        QWidget#HeroPanel {
-            background: #f8fbff;
-            border: 1px solid #e4edf8;
-            border-radius: 16px;
-        }
-        QLabel#HeroFlowChip {
-            background: #ecfdf5;
-            border: 1px solid #bbf7d0;
-            border-radius: 17px;
-            color: #16794a;
-            font-size: 12px;
-            font-weight: 700;
-            padding: 0 12px;
+            border: 1px solid #ffffff;
+            border-radius: 20px;
         }
         QStackedWidget#ContentStack,
         QWidget#ModulePage {
@@ -1307,20 +1384,21 @@ void AutoCadGui::applyStyles() {
             font-weight: 600;
         }
         QLabel#FeatureIcon {
-            background: #eaf2ff;
-            border-radius: 12px;
+            background: transparent;
+            border-radius: 0px;
             color: #2563eb;
-            font-size: 12px;
+            font-size: 22px;
             font-weight: 700;
         }
         QLabel#CardBigTitle {
-            color: #071a38;
-            font-size: 20px;
-            font-weight: 700;
+            color: #0f172a;
+            font-size: 24px;
+            font-weight: 800;
         }
         QLabel#MutedText,
         QLabel#UploadHint {
-            color: #526889;
+            color: #64748b;
+            font-size: 13px;
         }
         QLabel#SectionTitle {
             color: #071a38;
@@ -1336,8 +1414,8 @@ void AutoCadGui::applyStyles() {
         }
         QWidget#UploadBox,
         QWidget#TaskFilePanel {
-            background: #fbfdff;
-            border: 1px solid #d7e4fb;
+            background: #ffffff;
+            border: none;
             border-radius: 12px;
         }
         QStackedWidget#UploadStack,
@@ -1346,14 +1424,14 @@ void AutoCadGui::applyStyles() {
             border: none;
         }
         QPushButton#UploadPromptPage {
-            background: #fbfdff;
-            border: 2px dashed #c9d8eb;
+            background: #f8fafc;
+            border: 2px dashed #e2e8f0;
             border-radius: 12px;
             text-align: center;
         }
         QPushButton#UploadPromptPage:hover {
-            background: #f5f9ff;
-            border-color: #87aef0;
+            background: #eff6ff;
+            border-color: #93c5fd;
         }
         QStackedWidget#TenderUploadStack,
         QWidget#TenderSelectedPage {
@@ -1371,10 +1449,10 @@ void AutoCadGui::applyStyles() {
         }
         QLabel#UploadIcon {
             background: #ffffff;
-            border: 1px solid #eef2f7;
-            border-radius: 29px;
-            color: #8aa0bc;
-            font-size: 30px;
+            border: 1px solid #f1f5f9;
+            border-radius: 22px;
+            color: #60a5fa;
+            font-size: 22px;
             font-weight: 600;
         }
         QLabel#LargeUploadIcon {
@@ -1383,8 +1461,8 @@ void AutoCadGui::applyStyles() {
             font-weight: 400;
         }
         QLabel#UploadTitle {
-            color: #17304f;
-            font-size: 16px;
+            color: #334155;
+            font-size: 14px;
             font-weight: 600;
         }
         QWidget#UploadedTenderFile {
@@ -1398,21 +1476,27 @@ void AutoCadGui::applyStyles() {
             font-weight: 700;
         }
         QWidget#SelectedFileRow {
-            background: #ffffff;
-            border: 1px solid #e0e8f3;
-            border-radius: 10px;
+            background: #eff6ff;
+            border: 1px solid #bfdbfe;
+            border-radius: 16px;
         }
         QLabel#SelectedFileType {
-            background: #eaf2ff;
-            border-radius: 8px;
-            color: #1d4ed8;
+            background: #ffffff;
+            border: 1px solid #e2e8f0;
+            border-radius: 12px;
+            color: #2563eb;
             font-weight: 700;
-            padding: 6px 10px;
+            font-size: 20px;
+        }
+        QLabel#SelectedFileCategory {
+            color: #2563eb;
+            font-size: 13px;
+            font-weight: 700;
         }
         QLabel#SelectedFileName {
-            color: #17304f;
-            font-size: 14px;
-            font-weight: 600;
+            color: #1e293b;
+            font-size: 15px;
+            font-weight: 500;
         }
         QPushButton#SmallActionButton {
             background: #eef4ff;
@@ -1429,9 +1513,9 @@ void AutoCadGui::applyStyles() {
         QPushButton#RemoveFileButton {
             background: transparent;
             border: none;
-            border-radius: 14px;
-            color: #8a98ab;
-            font-size: 16px;
+            border-radius: 17px;
+            color: #8aa0bc;
+            font-size: 22px;
             font-weight: 700;
         }
         QPushButton#RemoveFileButton:hover {
@@ -1590,16 +1674,243 @@ void AutoCadGui::applyStyles() {
     )");
 
     setStyleSheet(styleSheet() + R"(
-        QLabel#QueueTitle {
-            color: #071a38;
+        QWidget#AiSettingsCard {
+            background: #ffffff;
+            border: 1px solid #ffffff;
+            border-radius: 18px;
+        }
+        QLabel#AiCardIcon {
+            background: transparent;
+            border: none;
+            font-size: 22px;
+            font-weight: 900;
+        }
+        QLabel#AiCardIcon[tone="blue"] {
+            color: #2563eb;
+        }
+        QLabel#AiCardIcon[tone="purple"] {
+            color: #a855f7;
+        }
+        QLabel#AiCardIcon[tone="teal"] {
+            color: #0fbaaa;
+        }
+        QLabel#AiCardTitle {
+            color: #1e293b;
+            font-size: 24px;
+            font-weight: 800;
+        }
+        QFrame#AiCardDivider {
+            background: #edf2f7;
+            border: none;
+        }
+        QLabel#AiFieldLabel {
+            color: #334155;
             font-size: 16px;
+            font-weight: 500;
+        }
+        QComboBox#AiComboBox,
+        QLineEdit#SettingsInput {
+            background: #f8fafc;
+            border: 1px solid #dbe3ef;
+            border-radius: 10px;
+            padding: 0 14px;
+            color: #1e293b;
+            font-size: 16px;
+            selection-background-color: #2563eb;
+        }
+        QComboBox#AiComboBox:focus,
+        QLineEdit#SettingsInput:focus {
+            background: #ffffff;
+            border-color: #93c5fd;
+        }
+        QComboBox#AiComboBox::drop-down {
+            width: 28px;
+            border: none;
+        }
+        QLabel#AiStatusBadge {
+            background: #fff7ed;
+            border: 1px solid #fed7aa;
+            border-radius: 6px;
+            color: #f59e0b;
+            padding: 0 10px;
+            font-size: 13px;
             font-weight: 700;
         }
-        QLabel#TaskCount {
-            background: #eef4fb;
-            border-radius: 14px;
-            color: #526889;
+        QPushButton#AiGhostButton {
+            background: #ffffff;
+            border: 1px solid #dbe3ef;
+            border-radius: 10px;
+            color: #475569;
+            padding: 0 18px;
+            font-size: 15px;
+            font-weight: 600;
+        }
+        QPushButton#AiGhostButton:hover {
+            background: #f8fafc;
+            border-color: #cbd5e1;
+        }
+        QPushButton#AiBlueButton {
+            background: #2563eb;
+            border: none;
+            border-radius: 10px;
+            color: #ffffff;
+            padding: 0 18px;
+            font-size: 15px;
+            font-weight: 700;
+        }
+        QPushButton#AiPurpleButton {
+            background: #9d19f5;
+            border: none;
+            border-radius: 10px;
+            color: #ffffff;
+            padding: 0 20px;
+            font-size: 15px;
+            font-weight: 700;
+        }
+        QWidget#PromptTabBar {
+            background: #f8fafc;
+            border: none;
+            border-radius: 12px;
+        }
+        QPushButton#PromptTab,
+        QPushButton#PromptTabActive {
+            border-radius: 10px;
+            border: none;
+            font-size: 16px;
+            font-weight: 500;
+        }
+        QPushButton#PromptTab {
+            background: transparent;
+            color: #64748b;
+        }
+        QPushButton#PromptTabActive {
+            background: #ffffff;
+            border: 1px solid #dbe3ef;
+            color: #2563eb;
+        }
+        QWidget#PromptEditorBox {
+            background: #f8fafc;
+            border: 1px solid #dbe3ef;
+            border-radius: 10px;
+        }
+        QTextEdit#PromptEditor {
+            background: #f8fafc;
+            border: none;
+            border-radius: 10px;
+            color: #334155;
+            padding: 12px 14px;
+            font-family: "Microsoft YaHei UI", "Segoe UI";
+            font-size: 15px;
+            line-height: 22px;
+        }
+        QWidget#PromptVariablePanel {
+            background: #f1f5f9;
+            border-top: 1px solid #dbe3ef;
+            border-radius: 0px;
+        }
+        QLabel#AiSmallLabel {
+            color: #52678a;
+            font-size: 13px;
+            font-weight: 500;
+        }
+        QLabel#VariableChip {
+            background: #ffffff;
+            border: 1px solid #dbe3ef;
+            border-radius: 6px;
+            color: #8b1cf6;
+            font-size: 13px;
+            font-weight: 700;
             padding: 0 10px;
+        }
+        QWidget#AiFlowStep {
+            background: transparent;
+            border: none;
+        }
+        QLabel#AiFlowNumber {
+            border-radius: 17px;
+            font-size: 14px;
+            font-weight: 800;
+        }
+        QLabel#AiFlowNumber[state="done"] {
+            background: #b9f6ec;
+            color: #0f766e;
+        }
+        QLabel#AiFlowNumber[state="active"] {
+            background: #14b8a6;
+            color: #ffffff;
+            border-radius: 19px;
+            font-size: 15px;
+        }
+        QLabel#AiFlowNumber[state="pending"] {
+            background: #f1f5f9;
+            color: #94a3b8;
+        }
+        QLabel#AiFlowText {
+            background: transparent;
+            border: none;
+            color: #52678a;
+            font-size: 16px;
+            font-weight: 500;
+        }
+        QLabel#AiFlowText[state="active"] {
+            color: #0f766e;
+            font-weight: 800;
+        }
+        QLabel#AiFlowText[state="pending"] {
+            color: #94a3b8;
+        }
+        QLabel#AiPreviewTitle {
+            color: #334155;
+            font-size: 15px;
+            font-weight: 600;
+        }
+        QWidget#AiCandidateBox {
+            background: #ecfdf5;
+            border: 1px solid #b9f6ec;
+            border-radius: 10px;
+        }
+        QLabel#AiCandidateText {
+            color: #64748b;
+            font-size: 15px;
+            line-height: 24px;
+        }
+        QLabel#QueueTitle {
+            color: #1e293b;
+            font-size: 24px;
+            font-weight: 800;
+        }
+        QLabel#TaskCount {
+            background: #dbeafe;
+            border-radius: 13px;
+            color: #1d4ed8;
+            padding: 0 10px;
+            font-size: 13px;
+            font-weight: 700;
+        }
+        QWidget#QueueStepItem {
+            background: transparent;
+            border: none;
+        }
+        QLabel#QueueStepNumber {
+            background: #f1f5f9;
+            border: none;
+            border-radius: 15px;
+            color: #8aa0bc;
+            font-size: 15px;
+            font-weight: 800;
+        }
+        QLabel#QueueStepText {
+            background: transparent;
+            border: none;
+            color: #607590;
+            font-size: 16px;
+            font-weight: 500;
+        }
+        QLabel#QueueStepText[state="running"] {
+            color: #1d4ed8;
+        }
+        QLabel#QueueStepText[state="done"] {
+            color: #0f766e;
         }
         QWidget#TaskCard {
             background: #ffffff;
@@ -1642,35 +1953,24 @@ void AutoCadGui::applyStyles() {
             color: #536173;
             font-weight: 500;
         }
-        QLabel#SidebarBrand {
-            color: #2563eb;
-            font-size: 12px;
-            font-weight: 700;
-            letter-spacing: 0px;
-        }
-        QLabel#SidebarTitle {
-            color: #182538;
-            font-size: 16px;
-            font-weight: 600;
-            padding-bottom: 8px;
-        }
         QLabel#StepPill {
-            background: #f4f7fb;
-            border: 1px solid #e1e8f2;
-            border-radius: 6px;
-            color: #617084;
-            padding-left: 12px;
-            font-weight: 500;
+            background: transparent;
+            border: 1px solid transparent;
+            border-radius: 12px;
+            color: #64748b;
+            padding-left: 18px;
+            font-size: 17px;
+            font-weight: 600;
         }
         QLabel#StepPill[state="running"] {
-            background: #eaf2ff;
-            border-color: #8fb7f7;
+            background: #eff6ff;
+            border-color: #bfdbfe;
             color: #1d4ed8;
         }
         QLabel#StepPill[state="done"] {
-            background: #eaf7f0;
-            border-color: #94d3ad;
-            color: #16794a;
+            background: #f8fafc;
+            border-color: #f1f5f9;
+            color: #0f766e;
         }
         QLabel#SummaryTitle {
             color: #182538;
@@ -1681,44 +1981,64 @@ void AutoCadGui::applyStyles() {
             color: #6b7788;
         }
         QLabel#OutputSummary {
-            background: #f7f9fc;
-            border: 1px solid #e1e8f2;
-            border-radius: 6px;
-            color: #3d4b5c;
+            background: #f8fafc;
+            border: 1px solid #e2e8f0;
+            border-radius: 10px;
+            color: #475569;
             padding: 10px;
         }
         QLineEdit#PathEdit {
-            background: #f9fbfe;
-            border: 1px solid #cfd9e8;
+            background: transparent;
+            border: none;
             border-radius: 6px;
-            padding: 0 10px;
+            padding: 0 0;
             selection-background-color: #2563eb;
+            color: #1e293b;
+            font-weight: 600;
         }
         QLineEdit#PathEdit:focus {
-            border-color: #2563eb;
+            background: #ffffff;
         }
         QPushButton#IconButton,
         QPushButton#SecondaryButton {
-            background: #f9fbfe;
-            border: 1px solid #cfd9e8;
-            border-radius: 6px;
+            background: #ffffff;
+            border: 1px solid #e2e8f0;
+            border-radius: 8px;
+            color: #475569;
+            font-weight: 600;
         }
         QPushButton#IconButton:hover,
         QPushButton#SecondaryButton:hover {
-            background: #eef4ff;
-            border-color: #2563eb;
+            background: #f8fafc;
+            border-color: #cbd5e1;
         }
         QPushButton#PrimaryButton {
             background: #2563eb;
             color: #ffffff;
             border: none;
-            border-radius: 6px;
+            border-radius: 14px;
             padding: 0 22px;
-            font-size: 14px;
+            font-size: 20px;
             font-weight: 600;
         }
         QPushButton#PrimaryButton:hover {
             background: #1d4ed8;
+        }
+        QPushButton#QueuePrimaryButton {
+            background: #2563eb;
+            color: #ffffff;
+            border: none;
+            border-radius: 14px;
+            padding: 0 22px;
+            font-size: 18px;
+            font-weight: 600;
+        }
+        QPushButton#QueuePrimaryButton:hover {
+            background: #1d4ed8;
+        }
+        QPushButton#QueuePrimaryButton:disabled {
+            background: #e5e7eb;
+            color: #94a3b8;
         }
         QPushButton#PrimaryButton:disabled,
         QPushButton#SecondaryButton:disabled {
@@ -1772,23 +2092,35 @@ void AutoCadGui::applyStyles() {
             background: #b8c4d6;
         }
         QWidget#BoardLengthDataSourceCard {
-            background: #fbfdff;
-            border: 1px solid #d7e4fb;
-            border-radius: 12px;
+            background: #ffffff;
+            border: 1px solid #ffffff;
+            border-radius: 20px;
         }
         QWidget#OutputPathCard {
-            background: #fbfdff;
-            border: 1px solid #d7e4fb;
-            border-radius: 12px;
+            background: #ffffff;
+            border: 1px solid #ffffff;
+            border-radius: 20px;
         }
         QLabel#OutputPathTitle {
-            color: #071a38;
-            font-size: 15px;
-            font-weight: 700;
+            color: #1e293b;
+            font-size: 17px;
+            font-weight: 500;
         }
         QLabel#OutputPathHint {
-            color: #526889;
-            font-size: 12px;
+            color: #52678a;
+            font-size: 14px;
+        }
+        QWidget#DataSourcePathBox {
+            background: #f8fafc;
+            border: 1px solid #dbe3ef;
+            border-radius: 10px;
+        }
+        QLabel#MiniCardIcon {
+            background: transparent;
+            border: none;
+            color: #475569;
+            font-size: 18px;
+            font-weight: 800;
         }
         QLabel#DataSourceIcon {
             background: #eef4ff;
@@ -1799,34 +2131,33 @@ void AutoCadGui::applyStyles() {
             font-weight: 800;
         }
         QLabel#DataSourceTitle {
-            color: #071a38;
-            font-size: 15px;
-            font-weight: 700;
+            color: #1e293b;
+            font-size: 17px;
+            font-weight: 500;
         }
         QLabel#DataSourceDescription,
         QLabel#BoardLengthSourceMeta {
-            color: #526889;
-            font-size: 12px;
+            color: #52678a;
+            font-size: 14px;
         }
         QLabel#DataSourceCurrentLabel {
-            color: #7b8798;
-            font-size: 12px;
-            font-weight: 600;
+            color: #64748b;
+            font-size: 14px;
         }
         QLabel#BoardLengthSourceName {
-            color: #17304f;
-            font-size: 13px;
-            font-weight: 700;
+            color: #1e293b;
+            font-size: 15px;
+            font-weight: 500;
         }
         QLabel#DataSourceStatusChip {
-            border-radius: 13px;
-            font-size: 12px;
+            border-radius: 4px;
+            font-size: 10px;
             font-weight: 700;
-            padding: 0 10px;
+            padding: 0 8px;
         }
         QLabel#DataSourceStatusChip[state="default"] {
-            background: #eaf2ff;
-            color: #1d4ed8;
+            background: #f1f5f9;
+            color: #64748b;
         }
         QLabel#DataSourceStatusChip[state="custom"] {
             background: #f0fdf4;
@@ -1838,19 +2169,23 @@ void AutoCadGui::applyStyles() {
         }
         QPushButton#ChangeDataSourceButton,
         QPushButton#DefaultSourceButton {
-            background: #eef4ff;
-            border: 1px solid #cddcf6;
+            background: #ffffff;
+            border: 1px solid #e2e8f0;
             border-radius: 8px;
-            color: #1d4ed8;
+            color: #475569;
             padding: 0 12px;
             font-weight: 600;
+            font-size: 14px;
         }
         QPushButton#ChangeDataSourceButton:hover,
         QPushButton#DefaultSourceButton:hover {
-            background: #e0ecff;
-            border-color: #8fb7f7;
+            background: #f8fafc;
+            border-color: #cbd5e1;
         }
     )");
+
+    setStyleSheet(styleSheet() + AntDesignStyle::styleSheet());
+    syncGenerationControlHeight();
 }
 
 void AutoCadGui::setDefaults() {
@@ -1892,18 +2227,35 @@ void AutoCadGui::appendLog(const QString& text) {
 }
 
 void AutoCadGui::setRunning(bool running) {
-    startButton_->setEnabled(!running);
-    cancelButton_->setEnabled(running);
-    openOutputButton_->setEnabled(!running);
+    if (startButton_) {
+        startButton_->setEnabled(!running);
+    }
+    if (cancelButton_) {
+        cancelButton_->setEnabled(running);
+        cancelButton_->setVisible(running);
+    }
+    if (openOutputButton_) {
+        openOutputButton_->setEnabled(!running);
+        if (running) {
+            openOutputButton_->hide();
+        }
+    }
     if (running) {
         progressBar_->setRange(0, 0);
-        statusLabel_->setText("运行中");
+        progressBar_->show();
+        statusLabel_->setText("生成任务正在运行...");
+        statusLabel_->show();
+        outputSummaryLabel_->hide();
+        setGenerationStatus("生成中", "running");
         for (QLabel* label : stepLabels_) {
             setStepLabelState(label, "pending");
         }
         if (!stepLabels_.isEmpty()) {
             setStepLabelState(stepLabels_.front(), "running");
         }
+    }
+    else {
+        updateGenerationPanel();
     }
 }
 
@@ -2079,6 +2431,7 @@ void AutoCadGui::refreshUploadStatus() {
     addSelectedFileRow("外观病害", diseaseWorkbookEdit_);
 
     uploadStack_->setCurrentIndex(selectedFilesLayout_->count() > 0 ? 1 : 0);
+    updateGenerationPanel();
 }
 
 void AutoCadGui::addSelectedFileRow(const QString& label, QLineEdit* lineEdit) {
@@ -2096,29 +2449,37 @@ void AutoCadGui::addSelectedFileRow(const QString& label, QLineEdit* lineEdit) {
 
     auto* row = new QWidget(this);
     row->setObjectName("SelectedFileRow");
-    row->setFixedHeight(58);
+    row->setFixedHeight(92);
 
     auto* rowLayout = new QHBoxLayout(row);
-    rowLayout->setContentsMargins(12, 8, 10, 8);
-    rowLayout->setSpacing(12);
+    rowLayout->setContentsMargins(20, 14, 20, 14);
+    rowLayout->setSpacing(18);
 
-    auto* typeLabel = new QLabel(label, row);
+    auto* typeLabel = new QLabel("▦", row);
     typeLabel->setObjectName("SelectedFileType");
     typeLabel->setAlignment(Qt::AlignCenter);
-    typeLabel->setFixedWidth(86);
+    typeLabel->setFixedSize(52, 52);
+
+    auto* categoryLabel = new QLabel(label, row);
+    categoryLabel->setObjectName("SelectedFileCategory");
 
     auto* fileNameLabel = new QLabel(fileName, row);
     fileNameLabel->setObjectName("SelectedFileName");
     fileNameLabel->setToolTip(QDir::toNativeSeparators(path));
     fileNameLabel->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Preferred);
 
+    auto* fileTextLayout = new QVBoxLayout();
+    fileTextLayout->setSpacing(4);
+    fileTextLayout->addWidget(categoryLabel);
+    fileTextLayout->addWidget(fileNameLabel);
+
     auto* removeButton = new QPushButton("×", row);
     removeButton->setObjectName("RemoveFileButton");
-    removeButton->setFixedSize(28, 28);
+    removeButton->setFixedSize(34, 34);
     removeButton->setCursor(Qt::PointingHandCursor);
 
     rowLayout->addWidget(typeLabel);
-    rowLayout->addWidget(fileNameLabel, 1);
+    rowLayout->addLayout(fileTextLayout, 1);
     rowLayout->addWidget(removeButton);
 
     connect(removeButton, &QPushButton::clicked, this, [this, lineEdit]() {
@@ -2177,6 +2538,7 @@ void AutoCadGui::refreshBoardLengthSourceStatus() {
         boardLengthSourceStatusLabel_->setText("缺失");
         boardLengthSourceStatusLabel_->setProperty("state", "warning");
         polish(boardLengthSourceStatusLabel_);
+        updateGenerationPanel();
         return;
     }
 
@@ -2191,6 +2553,7 @@ void AutoCadGui::refreshBoardLengthSourceStatus() {
         boardLengthSourceStatusLabel_->setText("异常");
         boardLengthSourceStatusLabel_->setProperty("state", "warning");
         polish(boardLengthSourceStatusLabel_);
+        updateGenerationPanel();
         return;
     }
 
@@ -2200,6 +2563,7 @@ void AutoCadGui::refreshBoardLengthSourceStatus() {
         boardLengthSourceStatusLabel_->setText("空目录");
         boardLengthSourceStatusLabel_->setProperty("state", "warning");
         polish(boardLengthSourceStatusLabel_);
+        updateGenerationPanel();
         return;
     }
 
@@ -2209,6 +2573,109 @@ void AutoCadGui::refreshBoardLengthSourceStatus() {
     boardLengthSourceStatusLabel_->setText(isDefaultSource ? "默认" : "自定义");
     boardLengthSourceStatusLabel_->setProperty("state", isDefaultSource ? "default" : "custom");
     polish(boardLengthSourceStatusLabel_);
+    updateGenerationPanel();
+}
+
+void AutoCadGui::updateGenerationPanel() {
+    if (!generationStatusBadge_) {
+        return;
+    }
+
+    const QString workbookPath = diseaseWorkbookEdit_ ? diseaseWorkbookEdit_->text().trimmed() : QString();
+    const QString boardPath = boardLengthSourceEdit_ ? boardLengthSourceEdit_->text().trimmed() : QString();
+    const QString outputPath = outputDirEdit_ ? outputDirEdit_->text().trimmed() : QString();
+    const QString backendPath = exeEdit_ ? exeEdit_->text().trimmed() : QString();
+
+    const QFileInfo workbookInfo(workbookPath);
+    const QFileInfo boardInfo(boardPath);
+    const QFileInfo outputInfo(outputPath);
+    const QFileInfo backendInfo(backendPath);
+    const int boardWorkbookCount = boardInfo.exists() && boardInfo.isDir() ? countExcelFiles(boardPath) : 0;
+
+    const bool workbookOk = !workbookPath.isEmpty() && workbookInfo.exists() && workbookInfo.isFile();
+    const bool boardOk = !boardPath.isEmpty() && boardInfo.exists() && boardInfo.isDir() && boardWorkbookCount > 0;
+    const bool outputOk = !outputPath.isEmpty() &&
+        (QDir(outputPath).exists() || QDir(outputInfo.absolutePath()).exists());
+    const bool backendOk = !backendPath.isEmpty() && backendInfo.exists() && backendInfo.isFile();
+    const int readyCount = (workbookOk ? 1 : 0) + (boardOk ? 1 : 0) + (outputOk ? 1 : 0) + (backendOk ? 1 : 0);
+    const bool ready = readyCount == 4;
+
+    setGenerationCheck(
+        checkWorkbookIconLabel_,
+        checkWorkbookTextLabel_,
+        workbookOk,
+        "外观病害 Excel 已选择",
+        workbookPath.isEmpty() ? "请选择外观病害 Excel" : "外观病害 Excel 不可访问");
+    setGenerationCheck(
+        checkBoardSourceIconLabel_,
+        checkBoardSourceTextLabel_,
+        boardOk,
+        QString("板长数据源可读取 · %1 个表").arg(boardWorkbookCount),
+        boardPath.isEmpty() ? "请选择板长数据源目录" : "板长数据源缺失或无 Excel");
+    setGenerationCheck(
+        checkOutputIconLabel_,
+        checkOutputTextLabel_,
+        outputOk,
+        "输出目录可写入",
+        outputPath.isEmpty() ? "请选择输出目录" : "输出目录父级不可访问");
+    setGenerationCheck(
+        checkBackendIconLabel_,
+        checkBackendTextLabel_,
+        backendOk,
+        "后端生成程序可用",
+        "后端 draw_cad.exe 不可访问");
+
+    const bool running = startButton_ && !startButton_->isEnabled() && cancelButton_ && cancelButton_->isEnabled();
+    if (!running) {
+        setGenerationStatus(ready ? "可生成" : QString("待检查 %1/4").arg(readyCount), ready ? "ready" : "pending");
+        if (startButton_) {
+            startButton_->setEnabled(ready);
+        }
+    }
+}
+
+void AutoCadGui::syncGenerationControlHeight() {
+    auto* leftColumn = findChild<QWidget*>("LeftWorkflowColumn");
+    auto* generationCard = findChild<QWidget*>("GenerationControlCard");
+    if (!leftColumn || !generationCard) {
+        return;
+    }
+
+    if (leftColumn->layout()) {
+        leftColumn->layout()->activate();
+    }
+    if (generationCard->layout()) {
+        generationCard->layout()->activate();
+    }
+
+    generationCard->setFixedHeight(leftColumn->sizeHint().height());
+}
+
+void AutoCadGui::setGenerationStatus(const QString& text, const QString& state) {
+    if (!generationStatusBadge_) {
+        return;
+    }
+    generationStatusBadge_->setText(text);
+    generationStatusBadge_->setProperty("state", state);
+    polish(generationStatusBadge_);
+}
+
+void AutoCadGui::setGenerationCheck(
+    QLabel* iconLabel,
+    QLabel* textLabel,
+    bool ok,
+    const QString& okText,
+    const QString& failText) {
+    if (iconLabel) {
+        iconLabel->setText(ok ? "✓" : "!");
+        iconLabel->setProperty("state", ok ? "ok" : "warning");
+        polish(iconLabel);
+    }
+    if (textLabel) {
+        textLabel->setText(ok ? okText : failText);
+        textLabel->setProperty("state", ok ? "ok" : "warning");
+        polish(textLabel);
+    }
 }
 
 void AutoCadGui::chooseTenderFile() {
@@ -2269,14 +2736,29 @@ void AutoCadGui::setActiveModule(int index) {
     }
 
     if (index == 0) {
-        pageTitleLabel_->setText("报告转 CAD 工作台");
-        pageSubtitleLabel_->setText("上传外观病害总表，选择衬砌长度/板长数据源，自动生成多个标准 CAD 图纸文档。");
+        if (pageTitleIconLabel_) {
+            pageTitleIconLabel_->setText("≡");
+            pageTitleIconLabel_->setProperty("tone", "cad");
+            polish(pageTitleIconLabel_);
+        }
+        pageTitleLabel_->setText("批量生成衬砌平面图");
+        pageSubtitleLabel_->setText("上传外观病害总表，自动匹配板长基础数据，批量生成各个数据表的 DXF 图纸。");
     }
     else if (index == 1) {
+        if (pageTitleIconLabel_) {
+            pageTitleIconLabel_->setText("▤");
+            pageTitleIconLabel_->setProperty("tone", "word");
+            polish(pageTitleIconLabel_);
+        }
         pageTitleLabel_->setText("标书 Word 框架生成");
         pageSubtitleLabel_->setText("上传招标文件，自动解析章节、评分项与格式要求，生成可编辑的 Word 标书框架。");
     }
     else {
+        if (pageTitleIconLabel_) {
+            pageTitleIconLabel_->setText("✦");
+            pageTitleIconLabel_->setProperty("tone", "ai");
+            polish(pageTitleIconLabel_);
+        }
         pageTitleLabel_->setText("AI 设置与提示词管理");
         pageSubtitleLabel_->setText("配置 AI API Key、模型参数和自定义提示词，生成内容可应用到标书 Word 框架中的章节。");
     }

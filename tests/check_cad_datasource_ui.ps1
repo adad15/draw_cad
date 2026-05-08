@@ -9,6 +9,10 @@ if (-not (Test-Path -LiteralPath $SourcePath)) {
 }
 
 $source = Get-Content -LiteralPath $SourcePath -Raw -Encoding UTF8
+$stylePath = Join-Path (Split-Path -Parent $SourcePath) "AntDesignStyle.cpp"
+if (Test-Path -LiteralPath $stylePath) {
+    $source += Get-Content -LiteralPath $stylePath -Raw -Encoding UTF8
+}
 
 $requiredTokens = @(
     "BoardLengthDataSourceCard",
@@ -17,13 +21,35 @@ $requiredTokens = @(
     "ChangeDataSourceButton",
     "DefaultSourceButton",
     "AppShell",
-    "Sidebar",
-    "HeaderBar",
-    "ContentScroll",
+    "TopBar",
+    "PageTitleIcon",
     "CadDashboard",
-    "HeroPanel",
-    "HeroFlowChip",
+    "LeftWorkflowColumn",
+    "DataSourcePathBox",
+    "MiniCardIcon",
     "TaskFilePanel",
+    "uploadBox->setFixedHeight(112)",
+    "GenerationControlCard",
+    "GenerationStatusBadge",
+    "GenerationCompactNote",
+    "GenerationCheckRow",
+    "cadPageLayout->addWidget(cadDashboard)",
+    "mainLayout->setContentsMargins(0, 0, 0, 12)",
+    "leftColumnLayout->setSpacing(22)",
+    "card->setFixedHeight(286)",
+    "syncGenerationControlHeight",
+    'generationCard->setFixedHeight(leftColumn->sizeHint().height())',
+    "updateGenerationPanel",
+    "QueuePrimaryButton",
+    "AiSettingsCard",
+    "AiComboBox",
+    "PromptTabActive",
+    "PromptEditorBox",
+    "AiFlowStep",
+    "AiCandidateBox",
+    "AntDesignStyle",
+    "AntPrimaryButton",
+    "#1677ff",
     "OutputPathCard",
     "createOutputDirectoryCard",
     "refreshBoardLengthSourceStatus",
@@ -34,6 +60,21 @@ $requiredTokens = @(
 foreach ($token in $requiredTokens) {
     if (-not $source.Contains($token)) {
         throw "Missing expected CAD data source UI token: $token"
+    }
+}
+
+$forbiddenTokens = @(
+    "GenerationSummaryRow",
+    "createGenerationSummaryRow",
+    "QScrollArea#ContentScroll",
+    "ContentScroll",
+    "ScrollBarAlwaysOff",
+    "cadScroll"
+)
+
+foreach ($token in $forbiddenTokens) {
+    if ($source.Contains($token)) {
+        throw "Unexpected obsolete generation panel token: $token"
     }
 }
 

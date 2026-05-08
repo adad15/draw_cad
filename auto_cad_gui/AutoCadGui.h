@@ -39,6 +39,9 @@ private:
     QWidget* createOptionRow(const QString& title, const QString& description);
     QWidget* createFlowStep(int number, const QString& title, const QString& description, bool active = false);
     QWidget* createBoardLengthDataSourceCard();
+    QWidget* createOutputDirectoryCard();
+    QWidget* createGenerationControlCard();
+    QWidget* createGenerationCheckRow(QLabel** iconLabel, QLabel** textLabel);
     QLineEdit* createSettingsInput(const QString& placeholder, bool password = false);
     QLabel* createBodyText(const QString& text, const QString& objectName = QString());
     QHBoxLayout* createPathRow(
@@ -69,12 +72,17 @@ private:
     void chooseBoardLengthSource();
     void resetBoardLengthSource();
     void refreshBoardLengthSourceStatus();
+    void updateGenerationPanel();
+    void syncGenerationControlHeight();
+    void setGenerationStatus(const QString& text, const QString& state);
+    void setGenerationCheck(QLabel* iconLabel, QLabel* textLabel, bool ok, const QString& okText, const QString& failText);
     void chooseTenderFile();
     void refreshTenderFileStatus();
     void setActiveModule(int index);
 
     AutoCadController* controller_ = nullptr;
     QLabel* pageTitleLabel_ = nullptr;
+    QLabel* pageTitleIconLabel_ = nullptr;
     QLabel* pageSubtitleLabel_ = nullptr;
     QStackedWidget* contentStack_ = nullptr;
     QPushButton* cadNavButton_ = nullptr;
@@ -94,6 +102,15 @@ private:
     QStackedWidget* tenderUploadStack_ = nullptr;
     QLabel* tenderFileNameLabel_ = nullptr;
     QLabel* tenderFileMetaLabel_ = nullptr;
+    QLabel* generationStatusBadge_ = nullptr;
+    QLabel* checkWorkbookIconLabel_ = nullptr;
+    QLabel* checkWorkbookTextLabel_ = nullptr;
+    QLabel* checkBoardSourceIconLabel_ = nullptr;
+    QLabel* checkBoardSourceTextLabel_ = nullptr;
+    QLabel* checkOutputIconLabel_ = nullptr;
+    QLabel* checkOutputTextLabel_ = nullptr;
+    QLabel* checkBackendIconLabel_ = nullptr;
+    QLabel* checkBackendTextLabel_ = nullptr;
     QPushButton* startButton_ = nullptr;
     QPushButton* cancelButton_ = nullptr;
     QPushButton* openOutputButton_ = nullptr;

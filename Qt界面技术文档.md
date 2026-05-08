@@ -73,53 +73,50 @@ auto_cad_gui    Qt Widgets 界面
 
 ## 3. Qt 界面当前形态
 
-当前界面参考“报告转 CAD 工作台”的工作台风格，不再是传统表单堆叠界面。
+当前界面参考 `C:/Users/86199/Downloads/src` 中的 React/Tailwind 原型和用户提供的截图：顶部轻量导航、浅色渐变工作台背景、页面标题左侧蓝色图标、左侧上传与配置卡片、右侧等高生成控制卡片。
 
-主窗口由“左侧模块侧栏 + 顶部工作区标题栏 + 内容页栈”组成：
+CAD 生成页不再使用隐藏滚动工作区，`CadDashboard` 直接挂载到页面栈中，和标书生成页保持固定版式，避免鼠标滚轮导致页面内容上下偏移。
+
+主窗口由“顶部导航 + 页面标题 + 内容页栈”组成：
 
 ```text
 AppShell
-├─ Sidebar
-│  ├─ 品牌区
+├─ TopBar
+│  ├─ ReportCAD. 品牌区
 │  ├─ CAD 生成 / 标书生成 / 文件库 / AI 设置
-│  └─ 本地批量生成说明
-└─ Workspace
-   ├─ HeaderBar
-   │  ├─ pageTitleLabel_
-   │  ├─ pageSubtitleLabel_
-   │  └─ 搜索 / 通知 / 用户头像
-   └─ contentStack_
-      ├─ CAD 生成页面
-      ├─ 标书生成页面
-      └─ AI 设置页面
+│  └─ 搜索 / 通知 / 用户头像
+├─ pageTitleLabel_
+├─ pageSubtitleLabel_
+└─ contentStack_
+   ├─ CAD 生成页面
+   ├─ 标书生成页面
+   └─ AI 设置页面
 ```
 
 页面切换由 `AutoCadGui::setActiveModule()` 控制。切换页面时会同步更新：
 
-- 侧栏导航按钮的激活样式。
+- 顶部导航按钮的激活样式。
 - 页面标题 `pageTitleLabel_`。
 - 页面说明 `pageSubtitleLabel_`。
 - `contentStack_` 当前页。
 
-### 3.1 侧栏与工作区标题栏
+### 3.1 顶部导航栏
 
-侧栏和工作区标题栏在 `AutoCadGui::setupUi()` 中创建：
+顶部导航栏在 `AutoCadGui::setupUi()` 中创建：
 
-- 左侧侧栏：`ReportCAD` 品牌、模块导航和本地批量生成说明。
-- 右侧工作区标题栏：页面标题、页面说明、搜索框、通知按钮、用户头像。
+- 左侧品牌：`ReportCAD.` 和蓝色 `CAD` 图标。
+- 中间导航：`CAD 生成`、`标书生成`、`文件库`、`AI 设置`。
+- 右侧工具：搜索框、通知按钮、用户头像。
 
 主要对象名：
 
 ```text
 AppShell
-Sidebar
-Workspace
-HeaderBar
+TopBar
 BrandIcon
 BrandText
 ActiveNavButton
 NavButton
-SidebarStatus
 SearchEdit
 NotificationButton
 UserAvatar
@@ -314,7 +311,7 @@ boardLengthSourceStatusLabel_
 2. “恢复默认”把 `boardLengthSourceEdit_` 还原为 `defaultPath("板长分布表")`。
 3. `refreshBoardLengthSourceStatus()` 会检查目录是否存在，并统计 `.xlsx/.xlsm/.xls` 数量。
 4. 后端输入契约不变，`collectInput()` 仍把 `boardLengthSourceEdit_` 写入 `WorkflowInput::boardLengthSource`。
-5. CAD 生成页放入 `ContentScroll` 可滚动工作区，数据源卡片和输出目录卡片使用固定高度并排显示，避免在较低窗口高度下与上传区域或底部操作按钮发生重叠。
+5. CAD 生成页使用固定工作区，数据源卡片、输出目录卡片和生成控制卡片使用统一底部对齐策略，避免隐藏滚动条和鼠标滚轮偏移。
 
 ### 3.6 默认输入输出策略
 
@@ -353,13 +350,14 @@ outputDirEdit_->setText(defaultPath("batch_output"));
 界面布局为：
 
 ```text
-ContentScroll / CadDashboard
-├─ GeneratorCard
-│  ├─ HeroPanel
-│  ├─ 本次任务文件 TaskFilePanel
-│  ├─ 基础数据源卡片        输出目录卡片
-│  └─ 开始生成 / 取消 / 打开输出目录
-└─ QueueCard
+CadDashboard
+├─ LeftWorkflowColumn
+│  ├─ GeneratorCard：本次任务文件 TaskFilePanel
+│  └─ 基础数据源卡片        输出目录卡片
+└─ GenerationControlCard
+   ├─ 标题 + “4 个步骤”胶囊
+   ├─ 圆形编号步骤行：提取病害符号 / 识别病害数据表 / 匹配基础数据源 / 批量生成 DXF
+   └─ 卡片底部主按钮：开始生成
 ```
 
 创建函数：
@@ -562,12 +560,12 @@ AI 设置与提示词管理
 配置 AI API Key、模型参数和自定义提示词，生成内容可应用到标书 Word 框架中的章节。
 ```
 
-该页面当前包含三列模块：
+该页面当前包含三列截图式卡片：
 
 ```text
-1 API Key 与模型
-2 自定义提示词
-3 应用到 Word 框架
+AiSettingsCard: API Key 与模型
+AiSettingsCard: 自定义提示词
+AiSettingsCard: 应用到 Word 框架
 ```
 
 #### 3.10.1 API Key 与模型
@@ -583,7 +581,7 @@ API Key
 默认模型
 ```
 
-输入框由 `createSettingsInput()` 创建。`API Key` 输入框使用：
+服务商使用 `AiComboBox` 下拉框；其它输入框由 `createSettingsInput()` 创建。`API Key` 输入框使用：
 
 ```cpp
 input->setEchoMode(QLineEdit::Password);
@@ -596,11 +594,10 @@ input->setEchoMode(QLineEdit::Password);
 保存设置
 ```
 
-当前状态提示：
+底部状态提示：
 
 ```text
-连接状态：待测试
-测试成功后才能启用 AI 内容生成。
+状态：待测试
 ```
 
 当前按钮只完成界面占位，尚未保存到配置文件，也未真实调用 AI 接口。
@@ -609,7 +606,7 @@ input->setEchoMode(QLineEdit::Password);
 
 第二列用于维护提示词模板。
 
-当前标签页：
+当前标签页使用 `PromptTabBar` 分段按钮：
 
 ```text
 技术方案
@@ -655,7 +652,7 @@ promptEditor->setObjectName("PromptEditor");
 
 第三列用于说明 AI 内容应用流程。
 
-流程步骤由 `createFlowStep()` 创建：
+流程步骤使用 `AiFlowStep`、`AiFlowNumber`、`AiFlowText` 组合，匹配截图中的圆形状态节点：
 
 ```text
 1 读取招标文件摘要
@@ -665,7 +662,7 @@ promptEditor->setObjectName("PromptEditor");
 5 写入 Word 框架
 ```
 
-其中第 3 步使用蓝色圆点表示当前核心步骤。
+其中第 3 步使用青绿色实心圆点表示当前核心步骤。
 
 底部候选内容预览：
 
@@ -1422,3 +1419,42 @@ public:
 - 可以为每一步提供更细粒度的取消和错误恢复。
 
 第二阶段会改动工程边界和链接结构，风险高于第一阶段，应在当前 GUI 稳定后再做。
+## 11. AntDesign Qt 风格适配
+
+2026-05-07 增加 `auto_cad_gui/AntDesignStyle.*`，参考
+`https://github.com/byralpha/AntDesign` 的 QtAntDesign 设计令牌和按钮交互方式，作为当前
+VS Qt Widgets 工程的轻量适配层。
+
+该开源项目本身是 Qt 6/CMake 演示工程，不是可直接链接的独立静态库。当前工程仍保持
+VS `.vcxproj` 构建方式，只接入对界面最有价值且风险最低的部分：
+
+- Ant Design 主色 `#1677ff`、hover/active 色、浅色卡片边框、圆角、输入框状态。
+- 卡片与顶部导航的 `QGraphicsDropShadowEffect` 阴影。
+- `AntPrimaryButton` 主按钮，带点击涟漪反馈，用于 CAD 开始生成、Word 生成和 AI 保存/应用按钮。
+- 第三方来源和 MIT 许可记录在 `auto_cad_gui/THIRD_PARTY_NOTICES.md`。
+
+如果后续要完整接入 QtAntDesign 的组件体系，需要把当前 `auto_cad_gui.vcxproj` 迁移到
+CMake，或把 QtAntDesign 改造成独立库目标后再链接；否则直接复制全量演示工程会引入
+Multimedia、OpenGLWidgets、Svg、资源文件和演示页面等无关依赖。
+
+## 12. CAD 生成控制面板
+
+2026-05-07 将 CAD 页面右侧的静态“生成任务队列”改为“生成控制”面板。原因是当前界面
+一次执行一个批量生成任务，并不存在真正的任务排队；右侧区域更适合作为操作状态中心。
+
+当前面板已压缩为两类信息，左侧配置卡片负责展示文件和目录详情，右侧只判断是否满足生成条件：
+
+- 生成前检查：外观病害 Excel、板长数据源、输出目录、后端 `draw_cad.exe`。
+- 运行控制：开始生成、取消生成、运行状态、进度条、生成完成后的结果摘要与打开输出目录。
+
+实现入口：
+
+```cpp
+QWidget* AutoCadGui::createGenerationControlCard();
+void AutoCadGui::updateGenerationPanel();
+void AutoCadGui::setGenerationStatus(const QString& text, const QString& state);
+void AutoCadGui::setGenerationCheck(...);
+```
+
+`refreshUploadStatus()`、`refreshBoardLengthSourceStatus()` 和输出目录输入框变化都会调用
+`updateGenerationPanel()`，确保右侧状态随左侧配置实时更新。
