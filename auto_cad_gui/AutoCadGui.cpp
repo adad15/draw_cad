@@ -106,7 +106,15 @@ AutoCadGui::AutoCadGui(QWidget* parent)
     refreshUploadStatus();
     refreshBoardLengthSourceStatus();
 
-    connect(controller_, &AutoCadController::progressTextChanged, this, &AutoCadGui::appendLog);
+    connect(controller_, &AutoCadController::progressTextChanged, this, [this](const QString& text) {
+        appendLog(text);
+        const QString lowerText = text.toLower();
+        const bool isError = lowerText.contains("error") || text.contains("错误") || text.contains("失败");
+        const bool isWarning = lowerText.contains("warning") || text.contains("警告");
+        if (generationInfoMode_ && (isError || isWarning)) {
+            appendGenerationIssueMessage(text, isError ? "error" : "warning");
+        }
+    });
     connect(controller_, &AutoCadController::progressUpdated, this,
         [this](int current, int total, const QString& message) {
             progressBar_->setRange(0, total);
@@ -128,8 +136,7 @@ AutoCadGui::AutoCadGui(QWidget* parent)
             progressBar_->setValue(ok ? 1 : 0);
             statusLabel_->setText(ok ? "生成完成" : "生成失败，请查看日志");
             statusLabel_->show();
-            outputSummaryLabel_->setText(summary.isEmpty() ? (ok ? "已完成生成任务。" : "生成失败。") : summary);
-            outputSummaryLabel_->show();
+            appendGenerationCompletionMessage(ok, summary);
             if (openOutputButton_) {
                 openOutputButton_->show();
             }
@@ -373,7 +380,9 @@ void AutoCadGui::setupUi() {
     connect(startButton_, &QPushButton::clicked, this, [this]() {
         ensureLogDialog();
         logEdit_->clear();
-        outputSummaryLabel_->setText("任务正在运行...");
+        generationIssueMessages_.clear();
+        setGenerationInfoMode(true);
+        setGenerationOutputSummary("正在生成 DXF，警告和错误信息会显示在这里。", "running");
         setLogDialogRunning();
         setRunning(true);
         controller_->run(collectInput());
@@ -404,30 +413,40 @@ QWidget* AutoCadGui::createGenerationControlCard() {
 
     auto* header = new QHBoxLayout();
     header->setContentsMargins(0, 0, 0, 0);
-    auto* title = new QLabel("生成控制", card);
-    title->setObjectName("GenerationTitle");
+    generationTitleLabel_ = new QLabel("生成控制", card);
+    generationTitleLabel_->setObjectName("GenerationTitle");
     generationStatusBadge_ = new QLabel("待检查", card);
     generationStatusBadge_->setObjectName("GenerationStatusBadge");
     generationStatusBadge_->setProperty("state", "pending");
     generationStatusBadge_->setAlignment(Qt::AlignCenter);
     generationStatusBadge_->setFixedHeight(26);
     generationStatusBadge_->setMinimumWidth(70);
-    header->addWidget(title);
+    header->addWidget(generationTitleLabel_);
     header->addStretch();
     header->addWidget(generationStatusBadge_);
     layout->addLayout(header);
 
     auto* checkTitle = new QLabel("生成前检查", card);
     checkTitle->setObjectName("GenerationSectionTitle");
+    generationPreflightWidgets_.push_back(checkTitle);
     layout->addWidget(checkTitle);
-    layout->addWidget(createGenerationCheckRow(&checkWorkbookIconLabel_, &checkWorkbookTextLabel_));
-    layout->addWidget(createGenerationCheckRow(&checkBoardSourceIconLabel_, &checkBoardSourceTextLabel_));
-    layout->addWidget(createGenerationCheckRow(&checkOutputIconLabel_, &checkOutputTextLabel_));
-    layout->addWidget(createGenerationCheckRow(&checkBackendIconLabel_, &checkBackendTextLabel_));
+    auto* workbookRow = createGenerationCheckRow(&checkWorkbookIconLabel_, &checkWorkbookTextLabel_);
+    auto* boardSourceRow = createGenerationCheckRow(&checkBoardSourceIconLabel_, &checkBoardSourceTextLabel_);
+    auto* outputRow = createGenerationCheckRow(&checkOutputIconLabel_, &checkOutputTextLabel_);
+    auto* backendRow = createGenerationCheckRow(&checkBackendIconLabel_, &checkBackendTextLabel_);
+    generationPreflightWidgets_.push_back(workbookRow);
+    generationPreflightWidgets_.push_back(boardSourceRow);
+    generationPreflightWidgets_.push_back(outputRow);
+    generationPreflightWidgets_.push_back(backendRow);
+    layout->addWidget(workbookRow);
+    layout->addWidget(boardSourceRow);
+    layout->addWidget(outputRow);
+    layout->addWidget(backendRow);
 
     auto* compactNote = new QLabel("配置项在左侧维护，这里只显示是否满足生成条件。", card);
     compactNote->setObjectName("GenerationCompactNote");
     compactNote->setWordWrap(true);
+    generationPreflightWidgets_.push_back(compactNote);
     layout->addWidget(compactNote);
 
     statusLabel_ = new QLabel("等待开始生成", card);
@@ -445,11 +464,18 @@ QWidget* AutoCadGui::createGenerationControlCard() {
     progressBar_->hide();
     layout->addWidget(progressBar_);
 
-    outputSummaryLabel_ = new QLabel("生成结束后显示结果摘要", card);
+    outputSummaryLabel_ = new QTextEdit(card);
     outputSummaryLabel_->setObjectName("OutputSummary");
-    outputSummaryLabel_->setWordWrap(true);
+    outputSummaryLabel_->setReadOnly(true);
+    outputSummaryLabel_->setLineWrapMode(QTextEdit::WidgetWidth);
+    outputSummaryLabel_->setVerticalScrollBarPolicy(Qt::ScrollBarAsNeeded);
+    outputSummaryLabel_->setHorizontalScrollBarPolicy(Qt::ScrollBarAsNeeded);
+    outputSummaryLabel_->setMinimumHeight(180);
+    outputSummaryLabel_->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
     outputSummaryLabel_->hide();
-    layout->addWidget(outputSummaryLabel_);
+    layout->addWidget(outputSummaryLabel_, 1);
+
+    layout->addStretch();
 
     startButton_ = new AntPrimaryButton("▷  开始生成", card);
     startButton_->setObjectName("QueuePrimaryButton");
@@ -1980,12 +2006,32 @@ void AutoCadGui::applyStyles() {
         QLabel#SummaryHint {
             color: #6b7788;
         }
-        QLabel#OutputSummary {
+        QTextEdit#OutputSummary {
             background: #f8fafc;
             border: 1px solid #e2e8f0;
             border-radius: 10px;
             color: #475569;
             padding: 10px;
+        }
+        QTextEdit#OutputSummary[state="running"] {
+            background: #eff6ff;
+            border-color: #bfdbfe;
+            color: #1d4ed8;
+        }
+        QTextEdit#OutputSummary[state="warning"] {
+            background: #fffbeb;
+            border-color: #fde68a;
+            color: #92400e;
+        }
+        QTextEdit#OutputSummary[state="error"] {
+            background: #fef2f2;
+            border-color: #fecaca;
+            color: #991b1b;
+        }
+        QTextEdit#OutputSummary[state="done"] {
+            background: #ecfdf5;
+            border-color: #a7f3d0;
+            color: #065f46;
         }
         QLineEdit#PathEdit {
             background: transparent;
@@ -2241,11 +2287,12 @@ void AutoCadGui::setRunning(bool running) {
         }
     }
     if (running) {
+        setGenerationInfoMode(true);
         progressBar_->setRange(0, 0);
         progressBar_->show();
         statusLabel_->setText("生成任务正在运行...");
         statusLabel_->show();
-        outputSummaryLabel_->hide();
+        setGenerationOutputSummary("正在生成 DXF，警告和错误信息会显示在这里。", "running");
         setGenerationStatus("生成中", "running");
         for (QLabel* label : stepLabels_) {
             setStepLabelState(label, "pending");
@@ -2255,7 +2302,9 @@ void AutoCadGui::setRunning(bool running) {
         }
     }
     else {
-        updateGenerationPanel();
+        if (!generationInfoMode_) {
+            updateGenerationPanel();
+        }
     }
 }
 
@@ -2581,6 +2630,11 @@ void AutoCadGui::updateGenerationPanel() {
         return;
     }
 
+    const bool running = startButton_ && !startButton_->isEnabled() && cancelButton_ && cancelButton_->isEnabled();
+    if (generationInfoMode_ && !running) {
+        setGenerationInfoMode(false);
+    }
+
     const QString workbookPath = diseaseWorkbookEdit_ ? diseaseWorkbookEdit_->text().trimmed() : QString();
     const QString boardPath = boardLengthSourceEdit_ ? boardLengthSourceEdit_->text().trimmed() : QString();
     const QString outputPath = outputDirEdit_ ? outputDirEdit_->text().trimmed() : QString();
@@ -2625,7 +2679,6 @@ void AutoCadGui::updateGenerationPanel() {
         "后端生成程序可用",
         "后端 draw_cad.exe 不可访问");
 
-    const bool running = startButton_ && !startButton_->isEnabled() && cancelButton_ && cancelButton_->isEnabled();
     if (!running) {
         setGenerationStatus(ready ? "可生成" : QString("待检查 %1/4").arg(readyCount), ready ? "ready" : "pending");
         if (startButton_) {
@@ -2649,6 +2702,77 @@ void AutoCadGui::syncGenerationControlHeight() {
     }
 
     generationCard->setFixedHeight(leftColumn->sizeHint().height());
+}
+
+void AutoCadGui::setGenerationInfoMode(bool active) {
+    generationInfoMode_ = active;
+    if (generationTitleLabel_) {
+        generationTitleLabel_->setText(active ? "生成信息" : "生成控制");
+    }
+    for (QWidget* widget : generationPreflightWidgets_) {
+        if (widget) {
+            widget->setVisible(!active);
+        }
+    }
+    if (startButton_) {
+        startButton_->setVisible(!active);
+    }
+    if (!active) {
+        if (statusLabel_) {
+            statusLabel_->hide();
+        }
+        if (progressBar_) {
+            progressBar_->hide();
+        }
+        if (outputSummaryLabel_) {
+            outputSummaryLabel_->hide();
+        }
+        if (cancelButton_) {
+            cancelButton_->hide();
+        }
+        if (openOutputButton_) {
+            openOutputButton_->hide();
+        }
+    }
+}
+
+void AutoCadGui::setGenerationOutputSummary(const QString& text, const QString& state) {
+    if (!outputSummaryLabel_) {
+        return;
+    }
+    outputSummaryLabel_->setPlainText(text);
+    outputSummaryLabel_->setProperty("state", state);
+    polish(outputSummaryLabel_);
+    outputSummaryLabel_->show();
+    outputSummaryLabel_->moveCursor(QTextCursor::End);
+}
+
+void AutoCadGui::appendGenerationIssueMessage(const QString& text, const QString& state) {
+    const QString message = text.trimmed();
+    if (message.isEmpty()) {
+        return;
+    }
+
+    generationIssueMessages_.append(message);
+    const QString currentState = outputSummaryLabel_->property("state").toString();
+    const QString displayState = state == "error" || currentState == "error" ? "error" : "warning";
+    setGenerationOutputSummary(generationIssueMessages_.join("\n\n"), displayState);
+}
+
+void AutoCadGui::appendGenerationCompletionMessage(bool ok, const QString& summary) {
+    const QString completion = summary.trimmed().isEmpty()
+        ? (ok ? "已完成生成任务。" : "生成失败，请查看运行日志。")
+        : summary.trimmed();
+
+    if (generationIssueMessages_.isEmpty()) {
+        setGenerationOutputSummary(completion, ok ? "done" : "error");
+        return;
+    }
+
+    generationIssueMessages_.append(completion);
+    const QString currentState = outputSummaryLabel_ ? outputSummaryLabel_->property("state").toString() : QString();
+    const QString displayState = !ok || currentState == "error" ? "error" : "warning";
+    setGenerationOutputSummary(generationIssueMessages_.join("\n\n"), displayState);
 }
 
 void AutoCadGui::setGenerationStatus(const QString& text, const QString& state) {

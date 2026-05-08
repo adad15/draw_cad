@@ -2,6 +2,7 @@
 
 #include "AutoCadController.h"
 
+#include <QStringList>
 #include <QVector>
 #include <QWidget>
 
@@ -74,6 +75,10 @@ private:
     void refreshBoardLengthSourceStatus();
     void updateGenerationPanel();
     void syncGenerationControlHeight();
+    void setGenerationInfoMode(bool active);
+    void setGenerationOutputSummary(const QString& text, const QString& state);
+    void appendGenerationIssueMessage(const QString& text, const QString& state);
+    void appendGenerationCompletionMessage(bool ok, const QString& summary);
     void setGenerationStatus(const QString& text, const QString& state);
     void setGenerationCheck(QLabel* iconLabel, QLabel* textLabel, bool ok, const QString& okText, const QString& failText);
     void chooseTenderFile();
@@ -102,6 +107,7 @@ private:
     QStackedWidget* tenderUploadStack_ = nullptr;
     QLabel* tenderFileNameLabel_ = nullptr;
     QLabel* tenderFileMetaLabel_ = nullptr;
+    QLabel* generationTitleLabel_ = nullptr;
     QLabel* generationStatusBadge_ = nullptr;
     QLabel* checkWorkbookIconLabel_ = nullptr;
     QLabel* checkWorkbookTextLabel_ = nullptr;
@@ -117,10 +123,13 @@ private:
     QTextEdit* logEdit_ = nullptr;
     QProgressBar* progressBar_ = nullptr;
     QLabel* statusLabel_ = nullptr;
-    QLabel* outputSummaryLabel_ = nullptr;
+    QTextEdit* outputSummaryLabel_ = nullptr;
     QDialog* logDialog_ = nullptr;
     QLabel* logDialogStatusLabel_ = nullptr;
     QProgressBar* logDialogProgressBar_ = nullptr;
     QPushButton* logDialogCloseButton_ = nullptr;
     QVector<QLabel*> stepLabels_;
+    QVector<QWidget*> generationPreflightWidgets_;
+    QStringList generationIssueMessages_;
+    bool generationInfoMode_ = false;
 };

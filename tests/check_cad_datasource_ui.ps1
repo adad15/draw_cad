@@ -9,6 +9,10 @@ if (-not (Test-Path -LiteralPath $SourcePath)) {
 }
 
 $source = Get-Content -LiteralPath $SourcePath -Raw -Encoding UTF8
+$headerPath = Join-Path (Split-Path -Parent $SourcePath) "AutoCadGui.h"
+if (Test-Path -LiteralPath $headerPath) {
+    $source += Get-Content -LiteralPath $headerPath -Raw -Encoding UTF8
+}
 $stylePath = Join-Path (Split-Path -Parent $SourcePath) "AntDesignStyle.cpp"
 if (Test-Path -LiteralPath $stylePath) {
     $source += Get-Content -LiteralPath $stylePath -Raw -Encoding UTF8
@@ -33,6 +37,22 @@ $requiredTokens = @(
     "GenerationStatusBadge",
     "GenerationCompactNote",
     "GenerationCheckRow",
+    "generationPreflightWidgets_",
+    "setGenerationInfoMode",
+    "appendGenerationIssueMessage",
+    "appendGenerationCompletionMessage",
+    "generationIssueMessages_",
+    "generationIssueMessages_.clear()",
+    "generationIssueMessages_.append(completion)",
+    "generationIssueMessages_.join(""\n\n"")",
+    "generationTitleLabel_->setText",
+    "startButton_->setVisible(!active)",
+    "outputSummaryLabel_->setReadOnly(true)",
+    "outputSummaryLabel_->setVerticalScrollBarPolicy(Qt::ScrollBarAsNeeded)",
+    "outputSummaryLabel_->setPlainText(text)",
+    "outputSummaryLabel_->setProperty(""state"", state)",
+    "QTextEdit* outputSummaryLabel_",
+    "QTextEdit#OutputSummary[state=""error""]",
     "cadPageLayout->addWidget(cadDashboard)",
     "mainLayout->setContentsMargins(0, 0, 0, 12)",
     "leftColumnLayout->setSpacing(22)",

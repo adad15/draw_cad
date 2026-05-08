@@ -355,9 +355,8 @@ CadDashboard
 │  ├─ GeneratorCard：本次任务文件 TaskFilePanel
 │  └─ 基础数据源卡片        输出目录卡片
 └─ GenerationControlCard
-   ├─ 标题 + “4 个步骤”胶囊
-   ├─ 圆形编号步骤行：提取病害符号 / 识别病害数据表 / 匹配基础数据源 / 批量生成 DXF
-   └─ 卡片底部主按钮：开始生成
+   ├─ 生成前：生成控制、4 项前置检查、开始生成按钮
+   └─ 生成中/完成后：生成信息、进度条、可滚动 warning/error 信息区、取消/打开输出目录
 ```
 
 创建函数：
@@ -1374,8 +1373,8 @@ std::setlocale(LC_ALL, ".UTF-8");
 1. 支持真正的拖拽文件到上传区域。
 2. 保存最近一次输入路径到本地配置文件。
 3. 运行前检查病害总表扩展名、板长目录是否包含可匹配 Excel。
-4. 将 warning 单独汇总显示。
-5. 增加“打开批量输出目录”和“打开 warning/error 日志”按钮。
+4. 对 warning/error 做按类型统计和筛选。
+5. 增加“打开 warning/error 日志”按钮。
 6. 文件列表中显示病害总表大小和最后修改时间。
 7. 增加任务完成后的桌面通知。
 8. 新增招标文件解析控制器，输出结构化章节、评分项和格式要求。
@@ -1442,19 +1441,36 @@ Multimedia、OpenGLWidgets、Svg、资源文件和演示页面等无关依赖。
 2026-05-07 将 CAD 页面右侧的静态“生成任务队列”改为“生成控制”面板。原因是当前界面
 一次执行一个批量生成任务，并不存在真正的任务排队；右侧区域更适合作为操作状态中心。
 
-当前面板已压缩为两类信息，左侧配置卡片负责展示文件和目录详情，右侧只判断是否满足生成条件：
+当前面板是“双态”工作区，左侧配置卡片负责展示文件和目录详情，右侧在生成前只判断是否满足生成条件，生成开始后切换成运行信息栏：
 
 - 生成前检查：外观病害 Excel、板长数据源、输出目录、后端 `draw_cad.exe`。
 - 运行控制：开始生成、取消生成、运行状态、进度条、生成完成后的结果摘要与打开输出目录。
+- 生成信息：生成开始后隐藏前置检查和开始按钮，标题从“生成控制”切换为“生成信息”。
+- warning/error 展示：`progressTextChanged` 中识别 `warning`、`error`、`警告`、`错误`、`失败` 关键字，追加到 `generationIssueMessages_`。
+- 信息区控件：`outputSummaryLabel_` 使用只读 `QTextEdit#OutputSummary`，支持垂直滚动，避免警告过多时无法翻看。
+- 完成提示：生成完成后调用 `appendGenerationCompletionMessage()`，如果本轮已有 warning/error，完成结果追加到信息区末尾，不覆盖已有问题列表。
+- 状态颜色：运行中、警告、错误、完成分别使用 `state="running" / "warning" / "error" / "done"` 样式；出现过 error 后，后续 warning 不会把信息区颜色降级。
 
 实现入口：
 
 ```cpp
 QWidget* AutoCadGui::createGenerationControlCard();
 void AutoCadGui::updateGenerationPanel();
+void AutoCadGui::setGenerationInfoMode(bool active);
+void AutoCadGui::setGenerationOutputSummary(const QString& text, const QString& state);
+void AutoCadGui::appendGenerationIssueMessage(const QString& text, const QString& state);
+void AutoCadGui::appendGenerationCompletionMessage(bool ok, const QString& summary);
 void AutoCadGui::setGenerationStatus(const QString& text, const QString& state);
 void AutoCadGui::setGenerationCheck(...);
 ```
 
 `refreshUploadStatus()`、`refreshBoardLengthSourceStatus()` 和输出目录输入框变化都会调用
 `updateGenerationPanel()`，确保右侧状态随左侧配置实时更新。
+
+运行状态切换规则：
+
+1. 点击“开始生成”时清空 `generationIssueMessages_`，进入生成信息模式。
+2. 运行期间每条 warning/error 都追加到同一信息区，使用空行分隔。
+3. 信息区自动滚到最新内容，但用户仍可向上翻看历史 warning/error。
+4. 生成完成后保留本轮所有 warning/error，并追加完成摘要。
+5. 用户重新选择病害总表、板长数据源或输出目录后，面板回到生成控制模式，便于重新生成。
