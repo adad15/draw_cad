@@ -28,6 +28,8 @@ constexpr const char* kChineseTextStyleName = "CN_TEXT";
 constexpr const char* kChineseFontFileName = "simsun.ttc";
 constexpr double kLiningBodyZoneCount = 4.0;
 constexpr double kCrownLineHalfRangeM = 0.2;
+constexpr double kMinDiseaseSegmentLengthM = 1e-6;
+constexpr size_t kMaxCrossSlabSegmentCount = 1000;
 
 struct SlabEntry {
     std::string slab_no;
@@ -83,6 +85,8 @@ struct DiseaseRecord {
     std::string length;
     std::string width;
     std::string area;
+    std::string render_length;
+    bool suppress_annotation = false;
 };
 
 struct SlabPlacement {
@@ -349,6 +353,26 @@ std::string slabDisplayText(const SlabEntry& slab) {
     return oss.str();
 }
 
+SlabEntry makeNumericSlabEntry(int slab_index) {
+    SlabEntry slab;
+    slab.slab_no = std::to_string(slab_index);
+    slab.slab_index = slab_index;
+    slab.has_numeric_slab = true;
+    return slab;
+}
+
+void sortSlabEntries(std::vector<SlabEntry>& slabs) {
+    std::stable_sort(slabs.begin(), slabs.end(), [](const SlabEntry& lhs, const SlabEntry& rhs) {
+        if (lhs.has_numeric_slab != rhs.has_numeric_slab) {
+            return lhs.has_numeric_slab;
+        }
+        if (lhs.has_numeric_slab && rhs.has_numeric_slab && lhs.slab_index != rhs.slab_index) {
+            return lhs.slab_index < rhs.slab_index;
+        }
+        return lhs.slab_no < rhs.slab_no;
+    });
+}
+
 bool areAdjacent(const SlabEntry& lhs, const SlabEntry& rhs) {
     return lhs.has_numeric_slab
         && rhs.has_numeric_slab
@@ -402,15 +426,7 @@ std::vector<SlabEntry> loadDiseaseSlabs(const std::string& path) {
         slabs.push_back(std::move(slab));
     }
 
-    std::stable_sort(slabs.begin(), slabs.end(), [](const SlabEntry& lhs, const SlabEntry& rhs) {
-        if (lhs.has_numeric_slab != rhs.has_numeric_slab) {
-            return lhs.has_numeric_slab;
-        }
-        if (lhs.has_numeric_slab && rhs.has_numeric_slab && lhs.slab_index != rhs.slab_index) {
-            return lhs.slab_index < rhs.slab_index;
-        }
-        return lhs.slab_no < rhs.slab_no;
-    });
+    sortSlabEntries(slabs);
 
     return slabs;
 }
@@ -908,6 +924,155 @@ double clampDouble(double value, double min_value, double max_value) {
     return std::max(min_value, std::min(value, max_value));
 }
 
+double slabLengthForIndex(
+    int slab_index,
+    const std::unordered_map<int, double>& length_by_slab,
+    const LiningPlanDxfWriter::Options& options) {
+    const auto found = length_by_slab.find(slab_index);
+    if (found != length_by_slab.end() && std::isfinite(found->second) && found->second > 0.0) {
+        return found->second;
+    }
+
+    return options.default_slab_length_m;
+}
+
+std::string lengthTextFromMeters(double length_m) {
+    return mytool::formatNumber(length_m) + "m";
+}
+
+bool isDrawableLongitudinalDisease(const DiseaseRecord& disease, double& length_m) {
+    const std::string symbol_id = symbolIdForDisease(disease);
+    if (!isLongitudinalSymbol(symbol_id)) {
+        return false;
+    }
+
+    return disease.has_numeric_slab
+        && parseLeadingDouble(disease.length, length_m)
+        && length_m > kMinDiseaseSegmentLengthM;
+}
+
+void addCrossSlabLongitudinalSlabs(
+    std::vector<SlabEntry>& slabs,
+    const std::vector<DiseaseRecord>& diseases,
+    const std::unordered_map<int, double>& length_by_slab,
+    const LiningPlanDxfWriter::Options& options) {
+    std::set<int> existing_numeric_slabs;
+    for (const SlabEntry& slab : slabs) {
+        if (slab.has_numeric_slab) {
+            existing_numeric_slabs.insert(slab.slab_index);
+        }
+    }
+
+    bool added_slab = false;
+    for (const DiseaseRecord& disease : diseases) {
+        double length_m = 0.0;
+        if (!isDrawableLongitudinalDisease(disease, length_m)) {
+            continue;
+        }
+
+        int current_slab = disease.slab_index;
+        double current_slab_length_m = slabLengthForIndex(current_slab, length_by_slab, options);
+        double distance_m = 0.0;
+        parseLeadingDouble(disease.distance_from_slab_end, distance_m);
+        double current_offset_m = clampDouble(distance_m, 0.0, current_slab_length_m);
+        double remaining_m = length_m;
+
+        for (size_t segment_index = 0;
+            remaining_m > kMinDiseaseSegmentLengthM && segment_index < kMaxCrossSlabSegmentCount;
+            ++segment_index) {
+            current_slab_length_m = slabLengthForIndex(current_slab, length_by_slab, options);
+            current_offset_m = clampDouble(current_offset_m, 0.0, current_slab_length_m);
+            const double available_m = std::max(0.0, current_slab_length_m - current_offset_m);
+            if (available_m > kMinDiseaseSegmentLengthM) {
+                remaining_m -= std::min(remaining_m, available_m);
+            }
+
+            if (remaining_m <= kMinDiseaseSegmentLengthM) {
+                break;
+            }
+
+            ++current_slab;
+            current_offset_m = 0.0;
+            if (existing_numeric_slabs.insert(current_slab).second) {
+                slabs.push_back(makeNumericSlabEntry(current_slab));
+                added_slab = true;
+            }
+        }
+    }
+
+    if (added_slab) {
+        sortSlabEntries(slabs);
+    }
+}
+
+std::vector<DiseaseRecord> splitLongitudinalCrossSlabDiseases(
+    const std::vector<DiseaseRecord>& diseases,
+    const std::unordered_map<int, double>& length_by_slab,
+    const LiningPlanDxfWriter::Options& options,
+    std::vector<std::string>& warnings) {
+    std::vector<DiseaseRecord> split_diseases;
+    split_diseases.reserve(diseases.size());
+
+    for (const DiseaseRecord& disease : diseases) {
+        double length_m = 0.0;
+        if (!isDrawableLongitudinalDisease(disease, length_m)) {
+            split_diseases.push_back(disease);
+            continue;
+        }
+
+        int current_slab = disease.slab_index;
+        double current_slab_length_m = slabLengthForIndex(current_slab, length_by_slab, options);
+        double distance_m = 0.0;
+        parseLeadingDouble(disease.distance_from_slab_end, distance_m);
+        double current_offset_m = clampDouble(distance_m, 0.0, current_slab_length_m);
+        double remaining_m = length_m;
+        bool emitted_segment = false;
+
+        for (size_t segment_index = 0;
+            remaining_m > kMinDiseaseSegmentLengthM && segment_index < kMaxCrossSlabSegmentCount;
+            ++segment_index) {
+            current_slab_length_m = slabLengthForIndex(current_slab, length_by_slab, options);
+            current_offset_m = clampDouble(current_offset_m, 0.0, current_slab_length_m);
+            const double available_m = std::max(0.0, current_slab_length_m - current_offset_m);
+            if (available_m <= kMinDiseaseSegmentLengthM) {
+                ++current_slab;
+                current_offset_m = 0.0;
+                continue;
+            }
+
+            const double segment_length_m = std::min(remaining_m, available_m);
+            DiseaseRecord segment = disease;
+            segment.slab_no = (current_slab == disease.slab_index)
+                ? disease.slab_no
+                : std::to_string(current_slab);
+            segment.slab_index = current_slab;
+            segment.has_numeric_slab = true;
+            segment.distance_from_slab_end = lengthTextFromMeters(current_offset_m);
+            segment.render_length = lengthTextFromMeters(segment_length_m);
+            segment.suppress_annotation = emitted_segment;
+            split_diseases.push_back(std::move(segment));
+
+            emitted_segment = true;
+            remaining_m -= segment_length_m;
+            ++current_slab;
+            current_offset_m = 0.0;
+        }
+
+        if (!emitted_segment) {
+            split_diseases.push_back(disease);
+            continue;
+        }
+
+        if (remaining_m > kMinDiseaseSegmentLengthM) {
+            warnings.emplace_back(
+                "Longitudinal disease source_row " + std::to_string(disease.source_row)
+                + " exceeded the cross-slab split limit; remaining length was skipped.");
+        }
+    }
+
+    return split_diseases;
+}
+
 double estimateTextWidth(std::string_view text, double height) {
     double width = 0.0;
     for (size_t i = 0; i < text.size();) {
@@ -1119,6 +1284,10 @@ std::string diseaseNoteText(const DiseaseRecord& disease, const std::string& sym
 
 std::vector<std::string> annotationLinesForDisease(const DiseaseRecord& disease, const std::string& symbol_id) {
     std::vector<std::string> lines;
+    if (disease.suppress_annotation) {
+        return lines;
+    }
+
     if (!disease.length.empty() && isLengthAnnotatedSymbol(symbol_id)) {
         lines.push_back("L=" + disease.length);
     }
@@ -1326,7 +1495,13 @@ void appendDiseases(
     }
 
     std::vector<DrawBox> placed_boxes;
-    for (const DiseaseRecord& disease : diseases) {
+    auto same_panel = [](const SlabPlacement& lhs, const SlabPlacement& rhs) {
+        return std::fabs(lhs.body_bottom_y - rhs.body_bottom_y) <= 1e-6
+            && std::fabs(lhs.top_y - rhs.top_y) <= 1e-6;
+    };
+
+    for (size_t disease_index = 0; disease_index < diseases.size(); ++disease_index) {
+        const DiseaseRecord& disease = diseases[disease_index];
         const auto placement_it = slab_placements.find(slabKey(disease.slab_no));
         if (placement_it == slab_placements.end()) {
             continue;
@@ -1351,6 +1526,8 @@ void appendDiseases(
 
         const SymbolDefinition& symbol = symbol_it->second;
         const SlabPlacement& placement = placement_it->second;
+        DiseaseRecord layout_disease = disease;
+        size_t merge_end_index = disease_index + 1;
         const double slab_width = placement.x2 - placement.x1;
         const double slab_length_m = std::max(placement.length_m, 1e-6);
 
@@ -1367,7 +1544,39 @@ void appendDiseases(
         double scale_y = options.defect_symbol_scale;
 
         double length_m = 0.0;
-        const bool has_length = parseLeadingDouble(disease.length, length_m) && length_m > 0.0;
+        const std::string geometry_length = firstNonEmpty({ disease.render_length, disease.length });
+        const bool has_length = parseLeadingDouble(geometry_length, length_m) && length_m > 0.0;
+        if (has_length && isLongitudinalSymbol(symbol_id)) {
+            double merged_length_m = length_m;
+            for (; merge_end_index < diseases.size(); ++merge_end_index) {
+                const DiseaseRecord& next_disease = diseases[merge_end_index];
+                if (next_disease.source_row != disease.source_row
+                    || !next_disease.suppress_annotation
+                    || symbolIdForDisease(next_disease) != symbol_id) {
+                    break;
+                }
+
+                const auto next_placement_it = slab_placements.find(slabKey(next_disease.slab_no));
+                if (next_placement_it == slab_placements.end()
+                    || !same_panel(placement, next_placement_it->second)) {
+                    break;
+                }
+
+                double next_length_m = 0.0;
+                const std::string next_geometry_length = firstNonEmpty({ next_disease.render_length, next_disease.length });
+                if (!parseLeadingDouble(next_geometry_length, next_length_m) || next_length_m <= 0.0) {
+                    break;
+                }
+
+                merged_length_m += next_length_m;
+            }
+
+            if (merge_end_index > disease_index + 1) {
+                layout_disease.render_length = lengthTextFromMeters(merged_length_m);
+                length_m = merged_length_m;
+            }
+        }
+
         if (has_length && isLongitudinalSymbol(symbol_id)) {
             scale_x = (length_m * options.drawing_units_per_meter) / bbox_width;
             scale_y = 1.0;
@@ -1384,15 +1593,21 @@ void appendDiseases(
             base_left_x = disease_x - symbol_width * 0.5;
         }
 
+        SlabPlacement layout_placement = placement;
+        if (merge_end_index > disease_index + 1 && isLongitudinalSymbol(symbol_id)) {
+            layout_placement.x1 = disease_x;
+            layout_placement.x2 = disease_x + symbol_width;
+        }
+
         const DiseaseLayout layout = chooseNonOverlappingLayout(
-            placement,
+            layout_placement,
             symbol_id,
             location_band,
             base_left_x,
             disease_y,
             symbol_width,
             symbol_height,
-            disease,
+            layout_disease,
             placed_boxes,
             options);
 
@@ -1408,6 +1623,7 @@ void appendDiseases(
                     "TEXT");
             }
             placed_boxes.push_back(layout.occupied_box);
+            disease_index = merge_end_index - 1;
             continue;
         }
 
@@ -1423,6 +1639,7 @@ void appendDiseases(
                 DrawTextAlign::Left);
         }
         placed_boxes.push_back(layout.occupied_box);
+        disease_index = merge_end_index - 1;
     }
 }
 
@@ -1632,6 +1849,7 @@ LiningPlanDxfWriter::WriteResult LiningPlanDxfWriter::run(
 
         const std::unordered_map<int, double> length_by_slab = loadBoardLengths(board_lengths_json);
         std::vector<std::string> warnings;
+        addCrossSlabLongitudinalSlabs(slabs, diseases, length_by_slab, options);
         for (SlabEntry& slab : slabs) {
             if (slab.has_numeric_slab) {
                 const auto found = length_by_slab.find(slab.slab_index);
@@ -1649,7 +1867,9 @@ LiningPlanDxfWriter::WriteResult LiningPlanDxfWriter::run(
                 + "; default length " + mytool::formatNumber(options.default_slab_length_m) + "m was used.");
         }
 
-        const DrawingData drawing = buildDrawing(slabs, diseases, symbols, warnings, options);
+        const std::vector<DiseaseRecord> drawable_diseases =
+            splitLongitudinalCrossSlabDiseases(diseases, length_by_slab, options, warnings);
+        const DrawingData drawing = buildDrawing(slabs, drawable_diseases, symbols, warnings, options);
         dxfRW writer(output_dxf.c_str());
         LiningPlanDxfInterface iface(writer, drawing);
         if (!writer.write(&iface, DRW::AC1021, false)) {
