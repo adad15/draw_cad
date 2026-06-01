@@ -165,15 +165,16 @@
     <ClInclude Include="BoardLengthJsonExporter.h" />
     <ClInclude Include="DiseaseReportJsonExporter.h" />
     <ClInclude Include="DxfSymbolCollector.h" />
+    <ClInclude Include="ExcelUtil.h" />
     <ClInclude Include="InspectionRow.h" />
     <ClInclude Include="InspectionTableReader.h" />
     <ClInclude Include="LiningPlanDxfWriter.h" />
     <ClInclude Include="dxf_to_json.h" />
-    <ClInclude Include="JsonSymbolDxfWriter.h" />
     <ClInclude Include="mytool.h" />
     <ClInclude Include="SymbolClassifier.h" />
     <ClInclude Include="SymbolGeometry.h" />
     <ClInclude Include="SymbolJsonWriter.h" />
+    <ClInclude Include="TextUtil.h" />
     <ClInclude Include="WorkflowMessageLog.h" />
   </ItemGroup>
   <ItemGroup>
@@ -200,17 +201,17 @@
     <ClCompile Include="BoardLengthJsonExporter.cpp" />
     <ClCompile Include="DiseaseReportJsonExporter.cpp" />
     <ClCompile Include="DxfSymbolCollector.cpp" />
+    <ClCompile Include="ExcelUtil.cpp" />
     <ClCompile Include="InspectionTableReader.cpp" />
     <ClCompile Include="LiningPlanDxfWriter.cpp" />
     <ClCompile Include="dxf_to_json.cpp" />
-    <ClCompile Include="JsonSymbolDxfWriter.cpp" />
     <ClCompile Include="main.cpp" />
     <ClCompile Include="mytool.cpp" />
     <ClCompile Include="SymbolClassifier.cpp" />
     <ClCompile Include="SymbolGeometry.cpp" />
     <ClCompile Include="SymbolJsonWriter.cpp" />
+    <ClCompile Include="TextUtil.cpp" />
     <ClCompile Include="WorkflowMessageLog.cpp" />
-    <ClCompile Include="test.cpp" />
   </ItemGroup>
   <ItemGroup>
     <None Include="..\libxfrw\Makefile.am" />

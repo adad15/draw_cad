@@ -129,9 +129,6 @@
     <ClInclude Include="SymbolClassifier.h">
       <Filter>头文件</Filter>
     </ClInclude>
-    <ClInclude Include="JsonSymbolDxfWriter.h">
-      <Filter>头文件</Filter>
-    </ClInclude>
     <ClInclude Include="BoardLengthJsonExporter.h">
       <Filter>头文件</Filter>
     </ClInclude>
@@ -142,6 +139,12 @@
       <Filter>头文件</Filter>
     </ClInclude>
     <ClInclude Include="InspectionTableReader.h">
+      <Filter>头文件</Filter>
+    </ClInclude>
+    <ClInclude Include="ExcelUtil.h">
+      <Filter>头文件</Filter>
+    </ClInclude>
+    <ClInclude Include="TextUtil.h">
       <Filter>头文件</Filter>
     </ClInclude>
     <ClInclude Include="LiningPlanDxfWriter.h">
@@ -233,9 +236,6 @@
     <ClCompile Include="DxfSymbolCollector.cpp">
       <Filter>源文件</Filter>
     </ClCompile>
-    <ClCompile Include="test.cpp">
-      <Filter>源文件</Filter>
-    </ClCompile>
     <ClCompile Include="SymbolGeometry.cpp">
       <Filter>源文件</Filter>
     </ClCompile>
@@ -245,9 +245,6 @@
     <ClCompile Include="SymbolClassifier.cpp">
       <Filter>源文件</Filter>
     </ClCompile>
-    <ClCompile Include="JsonSymbolDxfWriter.cpp">
-      <Filter>源文件</Filter>
-    </ClCompile>
     <ClCompile Include="BoardLengthJsonExporter.cpp">
       <Filter>源文件</Filter>
     </ClCompile>
@@ -255,6 +252,12 @@
       <Filter>源文件</Filter>
     </ClCompile>
     <ClCompile Include="InspectionTableReader.cpp">
+      <Filter>源文件</Filter>
+    </ClCompile>
+    <ClCompile Include="ExcelUtil.cpp">
+      <Filter>源文件</Filter>
+    </ClCompile>
+    <ClCompile Include="TextUtil.cpp">
       <Filter>源文件</Filter>
     </ClCompile>
     <ClCompile Include="LiningPlanDxfWriter.cpp">

@@ -1,17 +1,14 @@
 #include "DiseaseReportJsonExporter.h"
 
-#include "../OpenXLSX/include/OpenXLSX.hpp"
+#include "InspectionTableReader.h"
+#include "TextUtil.h"
 #include "../nlohmann/json.hpp"
-#include "mytool.h"
 
 #include <algorithm>
 #include <cctype>
 #include <cmath>
 #include <cstdlib>
-#include <ctime>
 #include <fstream>
-#include <sstream>
-#include <string_view>
 #include <utility>
 
 using nlohmann::json;
@@ -33,104 +30,8 @@ struct ReportRow {
     std::string area;
 };
 
-std::string utf8Literal(const char8_t* text) {
-    return std::string(
-        reinterpret_cast<const char*>(text),
-        std::char_traits<char8_t>::length(text));
-}
-
-std::string trimAsciiWhitespace(std::string text) {
-    auto not_space = [](unsigned char ch) {
-        return std::isspace(ch) == 0;
-    };
-
-    const auto begin = std::find_if(
-        text.begin(),
-        text.end(),
-        [&](char ch) { return not_space(static_cast<unsigned char>(ch)); });
-    if (begin == text.end()) {
-        return "";
-    }
-
-    const auto end = std::find_if(
-        text.rbegin(),
-        text.rend(),
-        [&](char ch) { return not_space(static_cast<unsigned char>(ch)); }).base();
-
-    return std::string(begin, end);
-}
-
-std::string stripUtf8Bom(std::string text) {
-    constexpr unsigned char bom0 = 0xEF;
-    constexpr unsigned char bom1 = 0xBB;
-    constexpr unsigned char bom2 = 0xBF;
-    if (text.size() >= 3
-        && static_cast<unsigned char>(text[0]) == bom0
-        && static_cast<unsigned char>(text[1]) == bom1
-        && static_cast<unsigned char>(text[2]) == bom2) {
-        text.erase(0, 3);
-    }
-    return text;
-}
-
 std::string normalizeText(std::string text) {
-    return trimAsciiWhitespace(stripUtf8Bom(std::move(text)));
-}
-
-std::string formatExcelDate(double serial) {
-    if (serial <= 0.0) {
-        return mytool::formatNumber(serial);
-    }
-
-    try {
-        const OpenXLSX::XLDateTime date_time(serial);
-        const std::tm tm = date_time.tm();
-        const bool has_time = (tm.tm_hour != 0 || tm.tm_min != 0 || tm.tm_sec != 0);
-        char buffer[32] = {};
-        const char* format = has_time ? "%Y-%m-%d %H:%M:%S" : "%Y-%m-%d";
-        if (std::strftime(buffer, sizeof(buffer), format, &tm) != 0) {
-            return buffer;
-        }
-    }
-    catch (...) {
-    }
-
-    return mytool::formatNumber(serial);
-}
-
-std::string cellToString(const OpenXLSX::XLCellValue& value, bool prefer_excel_date = false) {
-    std::string text;
-    switch (value.type()) {
-    case OpenXLSX::XLValueType::Empty:
-        text.clear();
-        break;
-    case OpenXLSX::XLValueType::Boolean:
-        text = value.get<bool>() ? "true" : "false";
-        break;
-    case OpenXLSX::XLValueType::Integer:
-        text = prefer_excel_date
-            ? formatExcelDate(static_cast<double>(value.get<int64_t>()))
-            : std::to_string(value.get<int64_t>());
-        break;
-    case OpenXLSX::XLValueType::Float:
-        text = prefer_excel_date
-            ? formatExcelDate(value.get<double>())
-            : mytool::formatNumber(value.get<double>());
-        break;
-    case OpenXLSX::XLValueType::Error:
-    case OpenXLSX::XLValueType::String:
-        text = value.get<std::string>();
-        break;
-    default:
-        text.clear();
-        break;
-    }
-
-    return normalizeText(std::move(text));
-}
-
-std::string cellText(OpenXLSX::XLWorksheet& worksheet, uint32_t row, uint16_t column) {
-    return cellToString(static_cast<OpenXLSX::XLCellValue>(worksheet.cell(row, column).value()));
+    return text_util::normalizeText(std::move(text));
 }
 
 bool isZeroJudgement(std::string text) {
@@ -163,9 +64,9 @@ std::string extractMarkedValue(const std::string& text, const std::string& marke
 
     const size_t value_start = marker_pos + marker.size();
     size_t value_end = text.size();
-    const std::string comma_cn = utf8Literal(u8"\uFF0C");
-    const std::string semicolon_cn = utf8Literal(u8"\uFF1B");
-    const std::string period_cn = utf8Literal(u8"\u3002");
+    const std::string comma_cn = text_util::utf8Literal(u8"\uFF0C");
+    const std::string semicolon_cn = text_util::utf8Literal(u8"\uFF1B");
+    const std::string period_cn = text_util::utf8Literal(u8"\u3002");
     const std::string delimiters[] = { comma_cn, ",", semicolon_cn, ";", period_cn, "\r", "\n" };
 
     for (const std::string& delimiter : delimiters) {
@@ -189,17 +90,6 @@ bool isEmptyReportRow(
         && check_item.empty()
         && defect_desc.empty()
         && judgement.empty();
-}
-
-std::string joinStrings(const std::vector<std::string>& items, std::string_view separator) {
-    std::ostringstream oss;
-    for (size_t index = 0; index < items.size(); ++index) {
-        if (index > 0) {
-            oss << separator;
-        }
-        oss << items[index];
-    }
-    return oss.str();
 }
 
 json makeOutputJson(
@@ -263,61 +153,41 @@ DiseaseReportJsonExporter::ExportResult DiseaseReportJsonExporter::run(
     }
 
     try {
-        OpenXLSX::XLDocument document;
-        document.open(input_xlsx);
+        InspectionTableReader::Options reader_options;
+        reader_options.sheet_name = options.sheet_name;
+        reader_options.header_row = options.header_row;
+        reader_options.skip_empty_rows = options.skip_empty_rows;
+        reader_options.trim_text = true;
+        reader_options.columns.stake_no.clear();
+        reader_options.columns.inspect_date.clear();
 
-        auto workbook = document.workbook();
-        const auto worksheet_names = workbook.worksheetNames();
-        if (worksheet_names.empty()) {
-            document.close();
-            return ExportResult::failure(34, "No readable worksheet was found in the workbook.");
-        }
-
-        std::string target_sheet_name = options.sheet_name;
-        if (target_sheet_name.empty()) {
-            target_sheet_name = worksheet_names.front();
-        }
-        else if (!workbook.worksheetExists(target_sheet_name)) {
-            const std::string message =
-                "Worksheet \"" + target_sheet_name + "\" was not found. Available worksheets: "
-                + joinStrings(worksheet_names, ", ");
-            document.close();
-            return ExportResult::failure(35, message);
-        }
-
-        auto worksheet = workbook.worksheet(target_sheet_name);
-        const uint32_t row_count = worksheet.rowCount();
-        const uint16_t column_count = worksheet.columnCount();
-        if (row_count <= options.header_row) {
-            document.close();
+        InspectionTableReader reader(reader_options);
+        const InspectionTableReader::ReadResult read_result = reader.read(input_xlsx);
+        if (!read_result.ok()) {
             return ExportResult::failure(
-                36,
-                "No data rows were found. header_row=" + std::to_string(options.header_row)
-                + ", row_count=" + std::to_string(row_count) + ".");
-        }
-        if (column_count < 7) {
-            document.close();
-            return ExportResult::failure(37, "The worksheet must contain at least columns A-G.");
+                40,
+                "Failed to read disease report worksheet: "
+                + text_util::joinStrings(read_result.errors, "; "));
         }
 
         std::vector<ReportRow> rows;
         size_t skipped_project_count = 0;
         size_t zero_judgement_count = 0;
         const std::string project_name_filter = options.project_name_filter.empty()
-            ? utf8Literal(u8"\u886C\u780C")
+            ? text_util::utf8Literal(u8"\u886C\u780C")
             : normalizeText(options.project_name_filter);
-        const std::string marker_distance = utf8Literal(u8"\u8DDD\u677F\u7AEF");
-        const std::string marker_length = utf8Literal(u8"\u957F\u5EA6\u4E3A");
-        const std::string marker_width = utf8Literal(u8"\u5BBD\u5EA6\u4E3A");
-        const std::string marker_area = utf8Literal(u8"\u9762\u79EF\u4E3A");
+        const std::string marker_distance = text_util::utf8Literal(u8"\u8DDD\u677F\u7AEF");
+        const std::string marker_length = text_util::utf8Literal(u8"\u957F\u5EA6\u4E3A");
+        const std::string marker_width = text_util::utf8Literal(u8"\u5BBD\u5EA6\u4E3A");
+        const std::string marker_area = text_util::utf8Literal(u8"\u9762\u79EF\u4E3A");
 
-        for (uint32_t row_index = options.header_row + 1; row_index <= row_count; ++row_index) {
-            const std::string slab_no = cellText(worksheet, row_index, 2);
-            const std::string project_name = cellText(worksheet, row_index, 3);
-            const std::string defect_location = cellText(worksheet, row_index, 4);
-            const std::string check_item = cellText(worksheet, row_index, 5);
-            const std::string defect_desc = cellText(worksheet, row_index, 6);
-            const std::string judgement = cellText(worksheet, row_index, 7);
+        for (const InspectionRow& inspection_row : read_result.rows) {
+            const std::string& slab_no = inspection_row.slab_no_raw;
+            const std::string& project_name = inspection_row.project_name;
+            const std::string& defect_location = inspection_row.defect_location_raw;
+            const std::string& check_item = inspection_row.check_item_raw;
+            const std::string& defect_desc = inspection_row.defect_desc_raw;
+            const std::string& judgement = inspection_row.judgement_raw;
 
             if (options.skip_empty_rows && isEmptyReportRow(slab_no, defect_location, check_item, defect_desc, judgement)) {
                 continue;
@@ -334,7 +204,7 @@ DiseaseReportJsonExporter::ExportResult DiseaseReportJsonExporter::run(
             }
 
             ReportRow row;
-            row.source_row = static_cast<int>(row_index);
+            row.source_row = inspection_row.source_row;
             row.slab_no = slab_no;
             row.project_name = project_name;
             row.defect_location = defect_location;
@@ -350,19 +220,19 @@ DiseaseReportJsonExporter::ExportResult DiseaseReportJsonExporter::run(
         }
 
         std::vector<std::string> warnings;
+        warnings.insert(warnings.end(), read_result.warnings.begin(), read_result.warnings.end());
         if (rows.empty()) {
             warnings.emplace_back("No disease rows were exported.");
         }
 
         std::ofstream out(output_json.c_str(), std::ios::binary);
         if (!out) {
-            document.close();
             return ExportResult::failure(38, "Failed to open output json: " + output_json);
         }
 
         const json root = makeOutputJson(
             input_xlsx,
-            target_sheet_name,
+            read_result.sheet_name,
             options.header_row,
             project_name_filter,
             skipped_project_count,
@@ -370,11 +240,9 @@ DiseaseReportJsonExporter::ExportResult DiseaseReportJsonExporter::run(
             rows);
         out << root.dump(2) << "\n";
         if (!out.good()) {
-            document.close();
             return ExportResult::failure(39, "Failed while writing output json: " + output_json);
         }
 
-        document.close();
         return ExportResult::success(rows.size(), zero_judgement_count, std::move(warnings));
     }
     catch (const std::exception& ex) {

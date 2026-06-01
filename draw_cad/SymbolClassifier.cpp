@@ -16,7 +16,7 @@ std::string SymbolClassifier::BlockName_to_Kind(const std::string& block_name) {
 }
 
 std::string SymbolClassifier::inferScaleMode(const std::string& kind) {
-	if (kind == "LongitudinalCrack" || kind == "TransverseCrack" || kind == "DiagonalCrack" || kind == "ExposedRebar") {
+	if (kind == "LongitudinalCrack" || kind == "TransverseCrack" || kind == "ExposedRebar") {
 		return "stretch_x";
 	}
 	return "uniform";

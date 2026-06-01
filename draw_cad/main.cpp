@@ -1,6 +1,8 @@
 #include "BoardLengthJsonExporter.h"
 #include "DiseaseReportJsonExporter.h"
+#include "ExcelUtil.h"
 #include "LiningPlanDxfWriter.h"
+#include "TextUtil.h"
 #include "WorkflowMessageLog.h"
 #include "dxf_to_json.h"
 #include "../OpenXLSX/include/OpenXLSX.hpp"
@@ -21,22 +23,16 @@
 
 namespace {
 
-std::string utf8Literal(const char8_t* text) {
-    return std::string(
-        reinterpret_cast<const char*>(text),
-        std::char_traits<char8_t>::length(text));
-}
-
 std::string workspaceRoot() {
     return R"(D:\vs2022 code\auto_cad\)";
 }
 
 std::string defaultBatchDiseaseReportPath() {
-    return workspaceRoot() + utf8Literal(u8"2025\u5E74\u9E64\u5927\u96A7\u9053\u5916\u89C2\u6574\u7406--\u672C\u6EAA\u539F\u59CB\u7248\u672C.xlsx");
+    return workspaceRoot() + text_util::utf8Literal(u8"2025\u5E74\u9E64\u5927\u96A7\u9053\u5916\u89C2\u6574\u7406--\u672C\u6EAA\u539F\u59CB\u7248\u672C.xlsx");
 }
 
 std::string defaultBoardLengthDirectory() {
-    return workspaceRoot() + utf8Literal(u8"\u677F\u957F\u5206\u5E03\u8868");
+    return workspaceRoot() + text_util::utf8Literal(u8"\u677F\u957F\u5206\u5E03\u8868");
 }
 
 std::string defaultSymbolsDxfPath() {
@@ -63,61 +59,13 @@ void configureConsoleEncoding() {
     std::setlocale(LC_ALL, ".UTF-8");
 }
 
-std::string trimAsciiWhitespace(std::string text) {
-    auto not_space = [](unsigned char ch) {
-        return std::isspace(ch) == 0;
-    };
-
-    const auto begin = std::find_if(
-        text.begin(),
-        text.end(),
-        [&](char ch) { return not_space(static_cast<unsigned char>(ch)); });
-    if (begin == text.end()) {
-        return "";
-    }
-
-    const auto end = std::find_if(
-        text.rbegin(),
-        text.rend(),
-        [&](char ch) { return not_space(static_cast<unsigned char>(ch)); }).base();
-
-    return std::string(begin, end);
-}
-
-std::string xlsxCellText(OpenXLSX::XLWorksheet& worksheet, uint32_t row, uint16_t column) {
-    const OpenXLSX::XLCellValue value = static_cast<OpenXLSX::XLCellValue>(worksheet.cell(row, column).value());
-    std::string text;
-    switch (value.type()) {
-    case OpenXLSX::XLValueType::Empty:
-        text.clear();
-        break;
-    case OpenXLSX::XLValueType::Boolean:
-        text = value.get<bool>() ? "true" : "false";
-        break;
-    case OpenXLSX::XLValueType::Integer:
-        text = std::to_string(value.get<int64_t>());
-        break;
-    case OpenXLSX::XLValueType::Float:
-        text = std::to_string(value.get<double>());
-        break;
-    case OpenXLSX::XLValueType::Error:
-    case OpenXLSX::XLValueType::String:
-        text = value.get<std::string>();
-        break;
-    default:
-        text.clear();
-        break;
-    }
-    return trimAsciiWhitespace(std::move(text));
-}
-
 bool isDiseaseWorksheet(OpenXLSX::XLWorksheet& worksheet) {
-    return xlsxCellText(worksheet, 1, 2) == utf8Literal(u8"\u886C\u780C\u677F\u5757\u53F7")
-        && xlsxCellText(worksheet, 1, 3) == utf8Literal(u8"\u9879\u76EE\u540D\u79F0")
-        && xlsxCellText(worksheet, 1, 4) == utf8Literal(u8"\u75C5\u5BB3\u4F4D\u7F6E")
-        && xlsxCellText(worksheet, 1, 5) == utf8Literal(u8"\u68C0\u67E5\u5185\u5BB9")
-        && xlsxCellText(worksheet, 1, 6) == utf8Literal(u8"\u75C5\u5BB3\u63CF\u8FF0")
-        && xlsxCellText(worksheet, 1, 7) == utf8Literal(u8"\u5224\u5B9A\u7ED3\u8BBA");
+    return excel_util::cellText(worksheet, 1, 2) == text_util::utf8Literal(u8"\u886C\u780C\u677F\u5757\u53F7")
+        && excel_util::cellText(worksheet, 1, 3) == text_util::utf8Literal(u8"\u9879\u76EE\u540D\u79F0")
+        && excel_util::cellText(worksheet, 1, 4) == text_util::utf8Literal(u8"\u75C5\u5BB3\u4F4D\u7F6E")
+        && excel_util::cellText(worksheet, 1, 5) == text_util::utf8Literal(u8"\u68C0\u67E5\u5185\u5BB9")
+        && excel_util::cellText(worksheet, 1, 6) == text_util::utf8Literal(u8"\u75C5\u5BB3\u63CF\u8FF0")
+        && excel_util::cellText(worksheet, 1, 7) == text_util::utf8Literal(u8"\u5224\u5B9A\u7ED3\u8BBA");
 }
 
 std::vector<std::string> diseaseWorksheetNames(const std::string& input_xlsx) {
@@ -139,7 +87,7 @@ std::vector<std::string> diseaseWorksheetNames(const std::string& input_xlsx) {
 }
 
 std::string sanitizeFileStem(std::string text) {
-    text = trimAsciiWhitespace(std::move(text));
+    text = text_util::trimAsciiWhitespace(std::move(text));
     for (char& ch : text) {
         const unsigned char value = static_cast<unsigned char>(ch);
         if (value < 0x20 || ch == '<' || ch == '>' || ch == ':' || ch == '"'
@@ -192,8 +140,8 @@ std::string removeAll(std::string text, const std::string& token) {
 }
 
 std::string normalizeBoardLengthMatchKey(std::string text) {
-    text = trimAsciiWhitespace(std::move(text));
-    text = removeAll(std::move(text), utf8Literal(u8"\u96A7\u9053"));
+    text = text_util::trimAsciiWhitespace(std::move(text));
+    text = removeAll(std::move(text), text_util::utf8Literal(u8"\u96A7\u9053"));
     text.erase(
         std::remove_if(
             text.begin(),

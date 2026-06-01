@@ -1,31 +1,24 @@
 #pragma once
 
 #include "InspectionRow.h"
+#include "TextUtil.h"
 
 #include <cstdint>
 #include <string>
 #include <vector>
 
-namespace inspection_table_reader_detail {
-inline std::string utf8Literal(const char8_t* text) {
-    return std::string(
-        reinterpret_cast<const char*>(text),
-        std::char_traits<char8_t>::length(text));
-}
-}
-
 // Reads required business columns from an xlsx worksheet into InspectionRow.
 class InspectionTableReader final {
 public:
     struct ColumnMapping {
-        std::string stake_no = inspection_table_reader_detail::utf8Literal(u8"\u6869\u53f7");
-        std::string slab_no = inspection_table_reader_detail::utf8Literal(u8"\u886c\u780c\u677f\u5757\u53f7");
-        std::string project_name = inspection_table_reader_detail::utf8Literal(u8"\u9879\u76ee\u540d\u79f0");
-        std::string defect_location = inspection_table_reader_detail::utf8Literal(u8"\u75c5\u5bb3\u4f4d\u7f6e");
-        std::string check_item = inspection_table_reader_detail::utf8Literal(u8"\u68c0\u67e5\u5185\u5bb9");
-        std::string defect_desc = inspection_table_reader_detail::utf8Literal(u8"\u75c5\u5bb3\u63cf\u8ff0");
-        std::string judgement = inspection_table_reader_detail::utf8Literal(u8"\u5224\u5b9a\u7ed3\u8bba");
-        std::string inspect_date = inspection_table_reader_detail::utf8Literal(u8"\u68c0\u6d4b\u65e5\u671f");
+        std::string stake_no = text_util::utf8Literal(u8"\u6869\u53f7");
+        std::string slab_no = text_util::utf8Literal(u8"\u886c\u780c\u677f\u5757\u53f7");
+        std::string project_name = text_util::utf8Literal(u8"\u9879\u76ee\u540d\u79f0");
+        std::string defect_location = text_util::utf8Literal(u8"\u75c5\u5bb3\u4f4d\u7f6e");
+        std::string check_item = text_util::utf8Literal(u8"\u68c0\u67e5\u5185\u5bb9");
+        std::string defect_desc = text_util::utf8Literal(u8"\u75c5\u5bb3\u63cf\u8ff0");
+        std::string judgement = text_util::utf8Literal(u8"\u5224\u5b9a\u7ed3\u8bba");
+        std::string inspect_date = text_util::utf8Literal(u8"\u68c0\u6d4b\u65e5\u671f");
     };
 
     struct Options {
@@ -37,6 +30,7 @@ public:
     };
 
     struct ReadResult {
+        std::string sheet_name;
         std::vector<InspectionRow> rows;
         std::vector<std::string> warnings;
         std::vector<std::string> errors;

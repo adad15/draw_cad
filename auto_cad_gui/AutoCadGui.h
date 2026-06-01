@@ -32,8 +32,6 @@ private:
 
     void setupUi();
     QWidget* createCadGenerationPage();
-    QWidget* createTenderGenerationPage();
-    QWidget* createAiSettingsPage();
     QWidget* createCard(const QString& title, QLayout* contentLayout);
     QWidget* createModuleCard(const QString& title, const QString& hint);
     QWidget* createInfoRow(const QString& label, const QString& value, const QString& chip);
@@ -81,8 +79,6 @@ private:
     void appendGenerationCompletionMessage(bool ok, const QString& summary);
     void setGenerationStatus(const QString& text, const QString& state);
     void setGenerationCheck(QLabel* iconLabel, QLabel* textLabel, bool ok, const QString& okText, const QString& failText);
-    void chooseTenderFile();
-    void refreshTenderFileStatus();
     void setActiveModule(int index);
 
     AutoCadController* controller_ = nullptr;
@@ -91,22 +87,16 @@ private:
     QLabel* pageSubtitleLabel_ = nullptr;
     QStackedWidget* contentStack_ = nullptr;
     QPushButton* cadNavButton_ = nullptr;
-    QPushButton* tenderNavButton_ = nullptr;
     QPushButton* fileLibraryNavButton_ = nullptr;
-    QPushButton* aiSettingsNavButton_ = nullptr;
     QLineEdit* exeEdit_ = nullptr;
     QLineEdit* diseaseWorkbookEdit_ = nullptr;
     QLineEdit* boardLengthSourceEdit_ = nullptr;
-    QLineEdit* tenderFileEdit_ = nullptr;
     QLineEdit* outputDirEdit_ = nullptr;
     QStackedWidget* uploadStack_ = nullptr;
     QVBoxLayout* selectedFilesLayout_ = nullptr;
     QLabel* boardLengthSourceNameLabel_ = nullptr;
     QLabel* boardLengthSourceMetaLabel_ = nullptr;
     QLabel* boardLengthSourceStatusLabel_ = nullptr;
-    QStackedWidget* tenderUploadStack_ = nullptr;
-    QLabel* tenderFileNameLabel_ = nullptr;
-    QLabel* tenderFileMetaLabel_ = nullptr;
     QLabel* generationTitleLabel_ = nullptr;
     QLabel* generationStatusBadge_ = nullptr;
     QLabel* checkWorkbookIconLabel_ = nullptr;

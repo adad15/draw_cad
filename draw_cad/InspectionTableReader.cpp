@@ -1,13 +1,9 @@
 #include "InspectionTableReader.h"
 
-#include "mytool.h"
+#include "ExcelUtil.h"
+#include "TextUtil.h"
 #include "../OpenXLSX/include/OpenXLSX.hpp"
 
-#include <algorithm>
-#include <cctype>
-#include <ctime>
-#include <sstream>
-#include <string_view>
 #include <unordered_map>
 #include <utility>
 
@@ -24,117 +20,6 @@ struct ResolvedColumns {
     uint16_t inspect_date = 0;
 };
 
-std::string stripUtf8Bom(std::string text) {
-    constexpr unsigned char bom0 = 0xEF;
-    constexpr unsigned char bom1 = 0xBB;
-    constexpr unsigned char bom2 = 0xBF;
-    if (text.size() >= 3
-        && static_cast<unsigned char>(text[0]) == bom0
-        && static_cast<unsigned char>(text[1]) == bom1
-        && static_cast<unsigned char>(text[2]) == bom2) {
-        text.erase(0, 3);
-    }
-    return text;
-}
-
-std::string trimAsciiWhitespace(std::string text) {
-    auto not_space = [](unsigned char ch) {
-        return std::isspace(ch) == 0;
-    };
-
-    const auto begin = std::find_if(
-        text.begin(),
-        text.end(),
-        [&](char ch) { return not_space(static_cast<unsigned char>(ch)); });
-    if (begin == text.end()) {
-        return "";
-    }
-
-    const auto end = std::find_if(
-        text.rbegin(),
-        text.rend(),
-        [&](char ch) { return not_space(static_cast<unsigned char>(ch)); }).base();
-
-    return std::string(begin, end);
-}
-
-std::string normalizeText(std::string text, bool trim_text) {
-    text = stripUtf8Bom(std::move(text));
-    if (trim_text) {
-        text = trimAsciiWhitespace(std::move(text));
-    }
-    return text;
-}
-
-std::string formatExcelDate(double serial) {
-    if (serial <= 0.0) {
-        return mytool::formatNumber(serial);
-    }
-
-    try {
-        const OpenXLSX::XLDateTime date_time(serial);
-        const std::tm tm = date_time.tm();
-        const bool has_time = (tm.tm_hour != 0 || tm.tm_min != 0 || tm.tm_sec != 0);
-        char buffer[32] = {};
-        const char* format = has_time ? "%Y-%m-%d %H:%M:%S" : "%Y-%m-%d";
-        if (std::strftime(buffer, sizeof(buffer), format, &tm) != 0) {
-            return buffer;
-        }
-    }
-    catch (...) {
-    }
-
-    return mytool::formatNumber(serial);
-}
-
-std::string cellToString(const OpenXLSX::XLCellValue& value, bool prefer_excel_date, bool trim_text) {
-    std::string text;
-    switch (value.type()) {
-    case OpenXLSX::XLValueType::Empty:
-        text.clear();
-        break;
-    case OpenXLSX::XLValueType::Boolean:
-        text = value.get<bool>() ? "true" : "false";
-        break;
-    case OpenXLSX::XLValueType::Integer:
-        if (prefer_excel_date) {
-            text = formatExcelDate(static_cast<double>(value.get<int64_t>()));
-        }
-        else {
-            text = std::to_string(value.get<int64_t>());
-        }
-        break;
-    case OpenXLSX::XLValueType::Float:
-        if (prefer_excel_date) {
-            text = formatExcelDate(value.get<double>());
-        }
-        else {
-            text = mytool::formatNumber(value.get<double>());
-        }
-        break;
-    case OpenXLSX::XLValueType::Error:
-    case OpenXLSX::XLValueType::String:
-        text = value.get<std::string>();
-        break;
-    default:
-        text.clear();
-        break;
-    }
-
-    return normalizeText(std::move(text), trim_text);
-}
-
-std::string joinStrings(const std::vector<std::string>& items, std::string_view separator) {
-    std::ostringstream oss;
-    for (size_t index = 0; index < items.size(); ++index) {
-        if (index > 0) {
-            oss << separator;
-        }
-        oss << items[index];
-    }
-    return oss.str();
-}
-
 bool isEmptyRow(const InspectionRow& row) {
     return row.stake_no.empty()
         && row.slab_no_raw.empty()
@@ -150,7 +35,12 @@ bool resolveColumn(
     const std::unordered_map<std::string, uint16_t>& header_to_column,
     const std::string& expected_header,
     uint16_t& output_column) {
-    const std::string normalized_header = normalizeText(expected_header, true);
+    const std::string normalized_header = text_util::normalizeText(expected_header, true);
+    if (normalized_header.empty()) {
+        output_column = 0;
+        return true;
+    }
+
     const auto found = header_to_column.find(normalized_header);
     if (found == header_to_column.end()) {
         return false;
@@ -158,6 +48,18 @@ bool resolveColumn(
 
     output_column = found->second;
     return true;
+}
+
+std::string readOptionalCell(
+    OpenXLSX::XLWorksheet& worksheet,
+    uint32_t row,
+    uint16_t column,
+    bool prefer_excel_date,
+    bool trim_text) {
+    if (column == 0) {
+        return {};
+    }
+    return excel_util::cellText(worksheet, row, column, prefer_excel_date, trim_text);
 }
 
 } // namespace
@@ -197,10 +99,11 @@ InspectionTableReader::ReadResult InspectionTableReader::read(const std::string&
         }
         else if (!workbook.worksheetExists(target_sheet_name)) {
             result.errors.emplace_back(
-                "Worksheet \"" + target_sheet_name + "\" was not found. Available worksheets: " + joinStrings(worksheet_names, ", "));
+                "Worksheet \"" + target_sheet_name + "\" was not found. Available worksheets: " + text_util::joinStrings(worksheet_names, ", "));
             document.close();
             return result;
         }
+        result.sheet_name = target_sheet_name;
 
         auto worksheet = workbook.worksheet(target_sheet_name);
         const uint32_t row_count = worksheet.rowCount();
@@ -222,7 +125,9 @@ InspectionTableReader::ReadResult InspectionTableReader::read(const std::string&
         std::vector<std::string> duplicate_headers;
         for (uint16_t column = 1; column <= column_count; ++column) {
             const auto header_value = static_cast<OpenXLSX::XLCellValue>(worksheet.cell(options_.header_row, column).value());
-            const std::string header = normalizeText(cellToString(header_value, false, false), true);
+            const std::string header = text_util::normalizeText(
+                excel_util::cellValueToString(header_value, false, false),
+                true);
             if (header.empty()) {
                 continue;
             }
@@ -235,7 +140,7 @@ InspectionTableReader::ReadResult InspectionTableReader::read(const std::string&
 
         if (!duplicate_headers.empty()) {
             result.warnings.emplace_back(
-                "Duplicate headers were found. The first matching column will be used: " + joinStrings(duplicate_headers, ", "));
+                "Duplicate headers were found. The first matching column will be used: " + text_util::joinStrings(duplicate_headers, ", "));
         }
 
         ResolvedColumns columns;
@@ -267,7 +172,7 @@ InspectionTableReader::ReadResult InspectionTableReader::read(const std::string&
 
         if (!missing_headers.empty()) {
             result.errors.emplace_back(
-                "Missing required headers: " + joinStrings(missing_headers, ", "));
+                "Missing required headers: " + text_util::joinStrings(missing_headers, ", "));
             document.close();
             return result;
         }
@@ -276,38 +181,14 @@ InspectionTableReader::ReadResult InspectionTableReader::read(const std::string&
             InspectionRow inspection_row;
             inspection_row.source_row = static_cast<int>(row);
 
-            inspection_row.stake_no = cellToString(
-                static_cast<OpenXLSX::XLCellValue>(worksheet.cell(row, columns.stake_no).value()),
-                false,
-                options_.trim_text);
-            inspection_row.slab_no_raw = cellToString(
-                static_cast<OpenXLSX::XLCellValue>(worksheet.cell(row, columns.slab_no).value()),
-                false,
-                options_.trim_text);
-            inspection_row.project_name = cellToString(
-                static_cast<OpenXLSX::XLCellValue>(worksheet.cell(row, columns.project_name).value()),
-                false,
-                options_.trim_text);
-            inspection_row.defect_location_raw = cellToString(
-                static_cast<OpenXLSX::XLCellValue>(worksheet.cell(row, columns.defect_location).value()),
-                false,
-                options_.trim_text);
-            inspection_row.check_item_raw = cellToString(
-                static_cast<OpenXLSX::XLCellValue>(worksheet.cell(row, columns.check_item).value()),
-                false,
-                options_.trim_text);
-            inspection_row.defect_desc_raw = cellToString(
-                static_cast<OpenXLSX::XLCellValue>(worksheet.cell(row, columns.defect_desc).value()),
-                false,
-                options_.trim_text);
-            inspection_row.judgement_raw = cellToString(
-                static_cast<OpenXLSX::XLCellValue>(worksheet.cell(row, columns.judgement).value()),
-                false,
-                options_.trim_text);
-            inspection_row.inspect_date_raw = cellToString(
-                static_cast<OpenXLSX::XLCellValue>(worksheet.cell(row, columns.inspect_date).value()),
-                true,
-                options_.trim_text);
+            inspection_row.stake_no = readOptionalCell(worksheet, row, columns.stake_no, false, options_.trim_text);
+            inspection_row.slab_no_raw = readOptionalCell(worksheet, row, columns.slab_no, false, options_.trim_text);
+            inspection_row.project_name = readOptionalCell(worksheet, row, columns.project_name, false, options_.trim_text);
+            inspection_row.defect_location_raw = readOptionalCell(worksheet, row, columns.defect_location, false, options_.trim_text);
+            inspection_row.check_item_raw = readOptionalCell(worksheet, row, columns.check_item, false, options_.trim_text);
+            inspection_row.defect_desc_raw = readOptionalCell(worksheet, row, columns.defect_desc, false, options_.trim_text);
+            inspection_row.judgement_raw = readOptionalCell(worksheet, row, columns.judgement, false, options_.trim_text);
+            inspection_row.inspect_date_raw = readOptionalCell(worksheet, row, columns.inspect_date, true, options_.trim_text);
 
             if (options_.skip_empty_rows && isEmptyRow(inspection_row)) {
                 continue;

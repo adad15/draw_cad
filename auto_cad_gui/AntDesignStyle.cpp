@@ -57,7 +57,6 @@ QString styleSheet() {
         QWidget#GenerationControlCard,
         QWidget#BoardLengthDataSourceCard,
         QWidget#OutputPathCard,
-        QWidget#AiSettingsCard,
         QWidget#ModuleCard {
             background: #ffffff;
             border: 1px solid #f0f3f8;
@@ -74,8 +73,7 @@ QString styleSheet() {
         }
         QLabel#CardBigTitle,
         QLabel#QueueTitle,
-        QLabel#GenerationTitle,
-        QLabel#AiCardTitle {
+        QLabel#GenerationTitle {
             color: #111827;
             font-weight: 800;
         }
@@ -166,9 +164,6 @@ QString styleSheet() {
             font-size: 14px;
             font-weight: 600;
         }
-        QLabel#AiCardTitle {
-            font-size: 23px;
-        }
         QWidget#TaskFilePanel {
             background: #ffffff;
             border: none;
@@ -214,7 +209,6 @@ QString styleSheet() {
             color: #5f6f89;
             font-size: 14px;
         }
-        QComboBox#AiComboBox,
         QLineEdit#SettingsInput,
         QLineEdit#PathEdit {
             background: #f8fbff;
@@ -223,13 +217,11 @@ QString styleSheet() {
             color: #1f2937;
             selection-background-color: #1677ff;
         }
-        QComboBox#AiComboBox:focus,
         QLineEdit#SettingsInput:focus,
         QLineEdit#PathEdit:focus {
             background: #ffffff;
             border-color: #1677ff;
         }
-        QPushButton#AiGhostButton,
         QPushButton#SecondaryButton,
         QPushButton#ChangeDataSourceButton,
         QPushButton#DefaultSourceButton,
@@ -240,7 +232,6 @@ QString styleSheet() {
             color: #3d4d63;
             font-weight: 600;
         }
-        QPushButton#AiGhostButton:hover,
         QPushButton#SecondaryButton:hover,
         QPushButton#ChangeDataSourceButton:hover,
         QPushButton#DefaultSourceButton:hover,
@@ -268,9 +259,7 @@ QString styleSheet() {
             color: #08979c;
         }
         QPushButton#QueuePrimaryButton,
-        QPushButton#PrimaryButton,
-        QPushButton#AiBlueButton,
-        QPushButton#AiPurpleButton {
+        QPushButton#PrimaryButton {
             background: transparent;
             border: none;
             color: #ffffff;

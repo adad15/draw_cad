@@ -1,17 +1,14 @@
 #include "BoardLengthJsonExporter.h"
 
+#include "ExcelUtil.h"
+#include "TextUtil.h"
 #include "../OpenXLSX/include/OpenXLSX.hpp"
 #include "../nlohmann/json.hpp"
 #include "mytool.h"
 
 #include <algorithm>
-#include <cctype>
-#include <cstdlib>
-#include <ctime>
 #include <fstream>
 #include <set>
-#include <sstream>
-#include <string_view>
 #include <utility>
 
 using nlohmann::json;
@@ -24,137 +21,16 @@ struct BoardLengthRow {
     std::string slab_no;
     std::string length_raw;
     double length_m = 0.0;
-    bool has_numeric_length = false;
     double slab_sort_value = 0.0;
     bool has_numeric_slab = false;
 };
 
-std::string trimAsciiWhitespace(std::string text) {
-    auto not_space = [](unsigned char ch) {
-        return std::isspace(ch) == 0;
-    };
-
-    const auto begin = std::find_if(
-        text.begin(),
-        text.end(),
-        [&](char ch) { return not_space(static_cast<unsigned char>(ch)); });
-    if (begin == text.end()) {
-        return "";
-    }
-
-    const auto end = std::find_if(
-        text.rbegin(),
-        text.rend(),
-        [&](char ch) { return not_space(static_cast<unsigned char>(ch)); }).base();
-
-    return std::string(begin, end);
-}
-
-std::string stripUtf8Bom(std::string text) {
-    constexpr unsigned char bom0 = 0xEF;
-    constexpr unsigned char bom1 = 0xBB;
-    constexpr unsigned char bom2 = 0xBF;
-    if (text.size() >= 3
-        && static_cast<unsigned char>(text[0]) == bom0
-        && static_cast<unsigned char>(text[1]) == bom1
-        && static_cast<unsigned char>(text[2]) == bom2) {
-        text.erase(0, 3);
-    }
-    return text;
-}
-
-std::string normalizeText(std::string text) {
-    return trimAsciiWhitespace(stripUtf8Bom(std::move(text)));
-}
-
-std::string formatExcelDate(double serial) {
-    if (serial <= 0.0) {
-        return mytool::formatNumber(serial);
-    }
-
-    try {
-        const OpenXLSX::XLDateTime date_time(serial);
-        const std::tm tm = date_time.tm();
-        const bool has_time = (tm.tm_hour != 0 || tm.tm_min != 0 || tm.tm_sec != 0);
-        char buffer[32] = {};
-        const char* format = has_time ? "%Y-%m-%d %H:%M:%S" : "%Y-%m-%d";
-        if (std::strftime(buffer, sizeof(buffer), format, &tm) != 0) {
-            return buffer;
-        }
-    }
-    catch (...) {
-    }
-
-    return mytool::formatNumber(serial);
-}
-
-std::string cellToString(const OpenXLSX::XLCellValue& value, bool prefer_excel_date = false) {
-    std::string text;
-    switch (value.type()) {
-    case OpenXLSX::XLValueType::Empty:
-        text.clear();
-        break;
-    case OpenXLSX::XLValueType::Boolean:
-        text = value.get<bool>() ? "true" : "false";
-        break;
-    case OpenXLSX::XLValueType::Integer:
-        text = prefer_excel_date
-            ? formatExcelDate(static_cast<double>(value.get<int64_t>()))
-            : std::to_string(value.get<int64_t>());
-        break;
-    case OpenXLSX::XLValueType::Float:
-        text = prefer_excel_date
-            ? formatExcelDate(value.get<double>())
-            : mytool::formatNumber(value.get<double>());
-        break;
-    case OpenXLSX::XLValueType::Error:
-    case OpenXLSX::XLValueType::String:
-        text = value.get<std::string>();
-        break;
-    default:
-        text.clear();
-        break;
-    }
-
-    return normalizeText(std::move(text));
-}
-
 std::string cellText(OpenXLSX::XLWorksheet& worksheet, uint32_t row, uint16_t column) {
-    return cellToString(static_cast<OpenXLSX::XLCellValue>(worksheet.cell(row, column).value()));
+    return excel_util::cellText(worksheet, row, column);
 }
 
 bool parseDoubleStrict(const std::string& text, double& out_value) {
-    const std::string normalized = normalizeText(text);
-    if (normalized.empty()) {
-        return false;
-    }
-
-    char* end = nullptr;
-    const double value = std::strtod(normalized.c_str(), &end);
-    if (end == normalized.c_str()) {
-        return false;
-    }
-
-    while (end != nullptr && *end != '\0') {
-        if (std::isspace(static_cast<unsigned char>(*end)) == 0) {
-            return false;
-        }
-        ++end;
-    }
-
-    out_value = value;
-    return true;
-}
-
-std::string joinStrings(const std::vector<std::string>& items, std::string_view separator) {
-    std::ostringstream oss;
-    for (size_t index = 0; index < items.size(); ++index) {
-        if (index > 0) {
-            oss << separator;
-        }
-        oss << items[index];
-    }
-    return oss.str();
+    return text_util::parseDoubleStrict(text, out_value);
 }
 
 bool isEmptyGroup(const std::string& slab_no, const std::string& length_raw) {
@@ -195,7 +71,6 @@ void appendBoardLengthRow(
     row.slab_no = std::move(slab_no);
     row.length_raw = std::move(length_raw);
     row.length_m = length_m;
-    row.has_numeric_length = true;
     row.has_numeric_slab = parseDoubleStrict(row.slab_no, row.slab_sort_value);
 
     rows.push_back(std::move(row));
@@ -273,7 +148,7 @@ BoardLengthJsonExporter::ExportResult BoardLengthJsonExporter::run(
         else if (!workbook.worksheetExists(target_sheet_name)) {
             const std::string message =
                 "Worksheet \"" + target_sheet_name + "\" was not found. Available worksheets: "
-                + joinStrings(worksheet_names, ", ");
+                + text_util::joinStrings(worksheet_names, ", ");
             document.close();
             return ExportResult::failure(55, message);
         }

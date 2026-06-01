@@ -8,16 +8,16 @@
 #include <QDialog>
 #include <QDesktopServices>
 #include <QDir>
+#include <QFile>
 #include <QFileDialog>
 #include <QFileInfo>
 #include <QFrame>
 #include <QHBoxLayout>
 #include <QLabel>
 #include <QLineEdit>
-#include <QPair>
+#include <QMessageBox>
 #include <QProgressBar>
 #include <QPushButton>
-#include <QComboBox>
 #include <QSizePolicy>
 #include <QStackedWidget>
 #include <QStyle>
@@ -26,6 +26,7 @@
 #include <QTextCursor>
 #include <QTextEdit>
 #include <QTextOption>
+#include <QTimer>
 #include <QUrl>
 #include <QVBoxLayout>
 
@@ -190,13 +191,9 @@ void AutoCadGui::setupUi() {
         return button;
     };
     cadNavButton_ = makeNavButton("CAD 生成", QStyle::SP_FileDialogDetailedView, true);
-    tenderNavButton_ = makeNavButton("标书生成", QStyle::SP_FileDialogListView, false);
     fileLibraryNavButton_ = makeNavButton("文件库", QStyle::SP_FileIcon, false);
-    aiSettingsNavButton_ = makeNavButton("AI 设置", QStyle::SP_FileDialogInfoView, false);
     topBarLayout->addWidget(cadNavButton_);
-    topBarLayout->addWidget(tenderNavButton_);
     topBarLayout->addWidget(fileLibraryNavButton_);
-    topBarLayout->addWidget(aiSettingsNavButton_);
     topBarLayout->addStretch();
 
     auto* searchEdit = new QLineEdit(topBar);
@@ -392,11 +389,7 @@ void AutoCadGui::setupUi() {
         QDesktopServices::openUrl(QUrl::fromLocalFile(outputDirEdit_->text()));
     });
 
-    contentStack_->addWidget(createTenderGenerationPage());
-    contentStack_->addWidget(createAiSettingsPage());
     connect(cadNavButton_, &QPushButton::clicked, this, [this]() { setActiveModule(0); });
-    connect(tenderNavButton_, &QPushButton::clicked, this, [this]() { setActiveModule(1); });
-    connect(aiSettingsNavButton_, &QPushButton::clicked, this, [this]() { setActiveModule(2); });
     setActiveModule(0);
 }
 
@@ -534,402 +527,6 @@ QWidget* AutoCadGui::createGenerationCheckRow(QLabel** iconLabel, QLabel** textL
         *textLabel = text;
     }
     return row;
-}
-
-QWidget* AutoCadGui::createTenderGenerationPage() {
-    auto* page = new QWidget(contentStack_);
-    page->setObjectName("ModulePage");
-    auto* pageLayout = new QHBoxLayout(page);
-    pageLayout->setContentsMargins(0, 0, 0, 0);
-    pageLayout->setSpacing(24);
-
-    tenderFileEdit_ = new QLineEdit(page);
-    tenderFileEdit_->hide();
-
-    auto* uploadCard = createModuleCard(
-        "1 上传招标文件",
-        "支持 PDF、DOCX、DOC、TXT。系统将提取目录、技术要求、评分标准和格式约束。");
-    auto* uploadLayout = qobject_cast<QVBoxLayout*>(uploadCard->layout());
-
-    tenderUploadStack_ = new QStackedWidget(uploadCard);
-    tenderUploadStack_->setObjectName("TenderUploadStack");
-    tenderUploadStack_->setMinimumHeight(208);
-
-    auto* uploadPrompt = new QPushButton(tenderUploadStack_);
-    uploadPrompt->setObjectName("TenderUploadPrompt");
-    uploadPrompt->setCursor(Qt::PointingHandCursor);
-    auto* promptLayout = new QVBoxLayout(uploadPrompt);
-    promptLayout->setContentsMargins(20, 26, 20, 26);
-    promptLayout->setSpacing(10);
-    auto* uploadIcon = new QLabel("↑", uploadPrompt);
-    uploadIcon->setObjectName("LargeUploadIcon");
-    uploadIcon->setAlignment(Qt::AlignCenter);
-    auto* uploadTitle = new QLabel("拖拽招标文件到此处，或者点击上传", uploadPrompt);
-    uploadTitle->setObjectName("UploadTitle");
-    uploadTitle->setAlignment(Qt::AlignCenter);
-    auto* uploadHint = new QLabel("上传后显示文件名、页数、解析状态", uploadPrompt);
-    uploadHint->setObjectName("UploadHint");
-    uploadHint->setAlignment(Qt::AlignCenter);
-    promptLayout->addStretch();
-    promptLayout->addWidget(uploadIcon);
-    promptLayout->addWidget(uploadTitle);
-    promptLayout->addWidget(uploadHint);
-    promptLayout->addStretch();
-    connect(uploadPrompt, &QPushButton::clicked, this, &AutoCadGui::chooseTenderFile);
-    tenderUploadStack_->addWidget(uploadPrompt);
-
-    auto* selectedPage = new QWidget(tenderUploadStack_);
-    selectedPage->setObjectName("TenderSelectedPage");
-    auto* selectedLayout = new QVBoxLayout(selectedPage);
-    selectedLayout->setContentsMargins(18, 18, 18, 18);
-    selectedLayout->setSpacing(14);
-    auto* fileRow = new QWidget(selectedPage);
-    fileRow->setObjectName("UploadedTenderFile");
-    fileRow->setFixedHeight(74);
-    auto* fileRowLayout = new QHBoxLayout(fileRow);
-    fileRowLayout->setContentsMargins(12, 10, 12, 10);
-    fileRowLayout->setSpacing(12);
-    auto* fileBadge = new QLabel("DOCX", fileRow);
-    fileBadge->setObjectName("SelectedFileType");
-    fileBadge->setAlignment(Qt::AlignCenter);
-    fileBadge->setFixedWidth(64);
-    tenderFileNameLabel_ = new QLabel("未选择招标文件", fileRow);
-    tenderFileNameLabel_->setObjectName("SelectedFileName");
-    tenderFileNameLabel_->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Preferred);
-    tenderFileMetaLabel_ = new QLabel("待解析", fileRow);
-    tenderFileMetaLabel_->setObjectName("TaskMeta");
-    auto* fileTextLayout = new QVBoxLayout();
-    fileTextLayout->setSpacing(2);
-    fileTextLayout->addWidget(tenderFileNameLabel_);
-    fileTextLayout->addWidget(tenderFileMetaLabel_);
-    auto* removeButton = new QPushButton("×", fileRow);
-    removeButton->setObjectName("RemoveFileButton");
-    removeButton->setFixedSize(28, 28);
-    removeButton->setCursor(Qt::PointingHandCursor);
-    connect(removeButton, &QPushButton::clicked, this, [this]() {
-        if (tenderFileEdit_) {
-            tenderFileEdit_->clear();
-        }
-        refreshTenderFileStatus();
-    });
-    fileRowLayout->addWidget(fileBadge);
-    fileRowLayout->addLayout(fileTextLayout, 1);
-    fileRowLayout->addWidget(removeButton);
-    selectedLayout->addStretch();
-    selectedLayout->addWidget(fileRow);
-    auto* reselectButton = new QPushButton("重新选择招标文件", selectedPage);
-    reselectButton->setObjectName("SmallActionButton");
-    reselectButton->setFixedHeight(34);
-    reselectButton->setCursor(Qt::PointingHandCursor);
-    connect(reselectButton, &QPushButton::clicked, this, &AutoCadGui::chooseTenderFile);
-    selectedLayout->addWidget(reselectButton, 0, Qt::AlignRight);
-    selectedLayout->addStretch();
-    tenderUploadStack_->addWidget(selectedPage);
-    uploadLayout->addWidget(tenderUploadStack_);
-
-    uploadLayout->addWidget(createBodyText("解析结果", "MiniSectionTitle"));
-    uploadLayout->addWidget(createInfoRow("项目类型", "隧道机电工程", "已识别"));
-    uploadLayout->addWidget(createInfoRow("评分项", "商务 / 技术 / 报价", "已提取"));
-    uploadLayout->addWidget(createInfoRow("格式要求", "目录、页眉页脚、编号", "可应用"));
-    uploadLayout->addStretch();
-
-    auto* configCard = createModuleCard(
-        "2 选择 Word 框架规则",
-        "将招标文件要求转换为 Word 章节结构与格式模板，生成后可继续编辑。");
-    auto* configLayout = qobject_cast<QVBoxLayout*>(configCard->layout());
-    configLayout->addWidget(createOptionRow("章节结构", "根据招标文件目录自动生成一级/二级/三级标题"));
-    configLayout->addWidget(createOptionRow("封面与目录", "创建封面、自动目录、页眉页脚占位"));
-    configLayout->addWidget(createOptionRow("格式规范", "宋体/黑体、字号、行距、页边距"));
-    configLayout->addWidget(createOptionRow("评分响应点", "把评分办法映射到技术响应章节"));
-    configLayout->addWidget(createOptionRow("AI 内容占位", "每个章节保留 AI 生成内容入口"));
-    auto* actionLayout = new QHBoxLayout();
-    actionLayout->setSpacing(12);
-    auto* generateButton = new AntPrimaryButton("生成 Word 框架", configCard);
-    generateButton->setObjectName("PrimaryButton");
-    generateButton->setFixedHeight(42);
-    generateButton->setCursor(Qt::PointingHandCursor);
-    auto* saveSchemeButton = new QPushButton("保存配置方案", configCard);
-    saveSchemeButton->setObjectName("SecondaryButton");
-    saveSchemeButton->setFixedHeight(42);
-    saveSchemeButton->setCursor(Qt::PointingHandCursor);
-    actionLayout->addWidget(generateButton);
-    actionLayout->addWidget(saveSchemeButton);
-    actionLayout->addStretch();
-    configLayout->addLayout(actionLayout);
-    configLayout->addStretch();
-
-    auto* previewCard = createModuleCard(
-        "3 预览生成结构",
-        "预览区展示最终 Word 文档骨架，蓝色标签表示可由 AI 自动补全内容。");
-    previewCard->setFixedWidth(360);
-    auto* previewLayout = qobject_cast<QVBoxLayout*>(previewCard->layout());
-    auto* documentPreview = new QWidget(previewCard);
-    documentPreview->setObjectName("DocumentPreview");
-    auto* documentLayout = new QVBoxLayout(documentPreview);
-    documentLayout->setContentsMargins(14, 14, 14, 14);
-    documentLayout->setSpacing(8);
-
-    const auto addOutlineLine = [this, documentLayout, documentPreview](
-        int index,
-        const QString& title,
-        const QString& tag,
-        bool aiTag) {
-        auto* line = new QWidget(documentPreview);
-        line->setObjectName("OutlineLine");
-        line->setFixedHeight(34);
-        auto* lineLayout = new QHBoxLayout(line);
-        lineLayout->setContentsMargins(10, 0, 8, 0);
-        lineLayout->setSpacing(10);
-
-        auto* indexLabel = new QLabel(QString("%1").arg(index, 2, 10, QLatin1Char('0')), line);
-        indexLabel->setObjectName("OutlineIndex");
-        auto* titleLabel = new QLabel(title, line);
-        titleLabel->setObjectName("OutlineTitle");
-        titleLabel->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Preferred);
-        auto* tagLabel = new QLabel(tag, line);
-        tagLabel->setObjectName(aiTag ? "OutlineTagAi" : "OutlineTag");
-        tagLabel->setAlignment(Qt::AlignCenter);
-        tagLabel->setFixedHeight(24);
-        tagLabel->setMinimumWidth(44);
-
-        lineLayout->addWidget(indexLabel);
-        lineLayout->addWidget(titleLabel, 1);
-        lineLayout->addWidget(tagLabel);
-        documentLayout->addWidget(line);
-    };
-
-    addOutlineLine(1, "封面", "格式", false);
-    addOutlineLine(2, "投标函", "AI", true);
-    addOutlineLine(3, "项目理解与总体方案", "AI", true);
-    addOutlineLine(4, "施工组织设计", "AI", true);
-    addOutlineLine(5, "质量与安全保障措施", "AI", true);
-    addOutlineLine(6, "主要设备材料响应表", "表格", false);
-    addOutlineLine(7, "评分办法响应索引", "AI", true);
-    addOutlineLine(8, "商务偏离表", "表格", false);
-    addOutlineLine(9, "报价文件占位", "格式", false);
-    previewLayout->addWidget(documentPreview);
-    previewLayout->addStretch();
-
-    pageLayout->addWidget(uploadCard, 1);
-    pageLayout->addWidget(configCard, 1);
-    pageLayout->addWidget(previewCard);
-    refreshTenderFileStatus();
-    return page;
-}
-
-QWidget* AutoCadGui::createAiSettingsPage() {
-    auto* page = new QWidget(contentStack_);
-    page->setObjectName("ModulePage");
-    auto* pageLayout = new QHBoxLayout(page);
-    pageLayout->setContentsMargins(0, 0, 0, 0);
-    pageLayout->setSpacing(30);
-
-    const auto createAiCard = [page](const QString& iconText, const QString& title, const QString& tone) {
-        auto* card = new QWidget(page);
-        card->setObjectName("AiSettingsCard");
-        AntDesignStyle::applyCardShadow(card);
-        card->setMinimumWidth(300);
-
-        auto* layout = new QVBoxLayout(card);
-        layout->setContentsMargins(26, 28, 26, 26);
-        layout->setSpacing(18);
-
-        auto* header = new QHBoxLayout();
-        header->setSpacing(12);
-        auto* icon = new QLabel(iconText, card);
-        icon->setObjectName("AiCardIcon");
-        icon->setProperty("tone", tone);
-        icon->setAlignment(Qt::AlignCenter);
-        icon->setFixedSize(26, 26);
-        auto* titleLabel = new QLabel(title, card);
-        titleLabel->setObjectName("AiCardTitle");
-        header->addWidget(icon);
-        header->addWidget(titleLabel, 1);
-        layout->addLayout(header);
-
-        auto* divider = new QFrame(card);
-        divider->setObjectName("AiCardDivider");
-        divider->setFixedHeight(1);
-        layout->addWidget(divider);
-        return QPair<QWidget*, QVBoxLayout*>(card, layout);
-    };
-
-    const auto addFieldLabel = [](QVBoxLayout* layout, QWidget* parent, const QString& text) {
-        auto* label = new QLabel(text, parent);
-        label->setObjectName("AiFieldLabel");
-        layout->addWidget(label);
-        return label;
-    };
-
-    auto apiPair = createAiCard("▣", "API Key 与模型", "blue");
-    auto* apiCard = apiPair.first;
-    auto* apiLayout = apiPair.second;
-    apiLayout->addSpacing(14);
-    addFieldLabel(apiLayout, apiCard, "服务商");
-    auto* serviceCombo = new QComboBox(apiCard);
-    serviceCombo->setObjectName("AiComboBox");
-    serviceCombo->addItem("OpenAI");
-    serviceCombo->addItem("兼容接口");
-    serviceCombo->setFixedHeight(46);
-    apiLayout->addWidget(serviceCombo);
-    addFieldLabel(apiLayout, apiCard, "API Base URL");
-    auto* baseUrlInput = createSettingsInput(QString());
-    baseUrlInput->setText("https://api.openai.com/v1");
-    apiLayout->addWidget(baseUrlInput);
-    addFieldLabel(apiLayout, apiCard, "API Key");
-    auto* keyInput = createSettingsInput(QString(), true);
-    keyInput->setText("sk-placeholder-key");
-    keyInput->addAction(style()->standardIcon(QStyle::SP_DialogYesButton), QLineEdit::LeadingPosition);
-    apiLayout->addWidget(keyInput);
-    addFieldLabel(apiLayout, apiCard, "默认模型");
-    auto* modelInput = createSettingsInput(QString());
-    modelInput->setText("gpt-4o");
-    apiLayout->addWidget(modelInput);
-    apiLayout->addStretch();
-    auto* apiFooter = new QHBoxLayout();
-    apiFooter->setSpacing(10);
-    auto* statusBadge = new QLabel("●  状态：待测试", apiCard);
-    statusBadge->setObjectName("AiStatusBadge");
-    statusBadge->setAlignment(Qt::AlignCenter);
-    statusBadge->setFixedHeight(34);
-    auto* testButton = new QPushButton("测试连接", apiCard);
-    testButton->setObjectName("AiGhostButton");
-    testButton->setFixedHeight(42);
-    auto* saveButton = new AntPrimaryButton("▣  保存", apiCard);
-    saveButton->setObjectName("AiBlueButton");
-    saveButton->setFixedHeight(42);
-    apiFooter->addWidget(statusBadge);
-    apiFooter->addStretch();
-    apiFooter->addWidget(testButton);
-    apiFooter->addWidget(saveButton);
-    apiLayout->addLayout(apiFooter);
-
-    auto promptPair = createAiCard("⌘", "自定义提示词", "purple");
-    auto* promptCard = promptPair.first;
-    auto* promptLayout = promptPair.second;
-    auto* tabBar = new QWidget(promptCard);
-    tabBar->setObjectName("PromptTabBar");
-    tabBar->setFixedHeight(50);
-    auto* tabRow = new QHBoxLayout(tabBar);
-    tabRow->setContentsMargins(4, 4, 4, 4);
-    tabRow->setSpacing(6);
-    for (const QString& tab : {"技术方案", "商务响应", "评分响应"}) {
-        auto* button = new QPushButton(tab, tabBar);
-        button->setObjectName(tab == "商务响应" ? "PromptTabActive" : "PromptTab");
-        button->setFixedHeight(42);
-        tabRow->addWidget(button, 1);
-    }
-    promptLayout->addWidget(tabBar);
-
-    auto* promptEditorBox = new QWidget(promptCard);
-    promptEditorBox->setObjectName("PromptEditorBox");
-    auto* editorBoxLayout = new QVBoxLayout(promptEditorBox);
-    editorBoxLayout->setContentsMargins(0, 0, 0, 0);
-    editorBoxLayout->setSpacing(0);
-    auto* promptEditor = new QTextEdit(promptEditorBox);
-    promptEditor->setObjectName("PromptEditor");
-    promptEditor->setFixedHeight(196);
-    promptEditor->setPlainText(
-        "你是资深投标文件编制专家。\n"
-        "请基于 {招标文件摘要}、{章节名称}、\n"
-        "{评分标准}\n"
-        "生成符合招标要求的技术响应内容。\n"
-        "要求：结构清晰、避免夸大、可直接写入\n"
-        "Word。");
-    editorBoxLayout->addWidget(promptEditor);
-    auto* variablesPanel = new QWidget(promptEditorBox);
-    variablesPanel->setObjectName("PromptVariablePanel");
-    auto* variablesLayout = new QVBoxLayout(variablesPanel);
-    variablesLayout->setContentsMargins(16, 12, 16, 14);
-    variablesLayout->setSpacing(8);
-    auto* variableTitle = new QLabel("可用变量", variablesPanel);
-    variableTitle->setObjectName("AiSmallLabel");
-    variablesLayout->addWidget(variableTitle);
-    auto* variableRow1 = new QHBoxLayout();
-    variableRow1->setSpacing(8);
-    auto* variableRow2 = new QHBoxLayout();
-    variableRow2->setSpacing(8);
-    int variableIndex = 0;
-    for (const QString& variable : {"{招标文件摘要}", "{章节名称}", "{评分标准}", "{项目类型}"}) {
-        auto* chip = new QLabel(variable, variablesPanel);
-        chip->setObjectName("VariableChip");
-        chip->setAlignment(Qt::AlignCenter);
-        chip->setFixedHeight(32);
-        (variableIndex < 3 ? variableRow1 : variableRow2)->addWidget(chip);
-        ++variableIndex;
-    }
-    variableRow1->addStretch();
-    variableRow2->addStretch();
-    variablesLayout->addLayout(variableRow1);
-    variablesLayout->addLayout(variableRow2);
-    editorBoxLayout->addWidget(variablesPanel);
-    promptLayout->addWidget(promptEditorBox, 1);
-    auto* promptActions = new QHBoxLayout();
-    promptActions->setSpacing(10);
-    promptActions->addStretch();
-    auto* previewButton = new QPushButton("▷  预览生成", promptCard);
-    previewButton->setObjectName("AiGhostButton");
-    previewButton->setFixedHeight(46);
-    auto* applyButton = new AntPrimaryButton("应用到标书章节", promptCard);
-    applyButton->setObjectName("AiPurpleButton");
-    applyButton->setAccentColor(QColor("#722ed1"));
-    applyButton->setFixedHeight(46);
-    promptActions->addWidget(previewButton);
-    promptActions->addWidget(applyButton);
-    promptLayout->addLayout(promptActions);
-
-    auto flowPair = createAiCard("✓", "应用到 Word 框架", "teal");
-    auto* flowCard = flowPair.first;
-    auto* flowLayout = flowPair.second;
-    flowLayout->addSpacing(10);
-    const QVector<QPair<QString, QString>> flowSteps = {
-        {"✓", "读取招标文件摘要"},
-        {"✓", "选择 Word 章节"},
-        {"3", "套用提示词生成内容"},
-        {"4", "进入候选内容区"},
-        {"5", "写入 Word 框架"}
-    };
-    int flowIndex = 0;
-    for (const auto& step : flowSteps) {
-        auto* stepWidget = new QWidget(flowCard);
-        stepWidget->setObjectName("AiFlowStep");
-        auto* stepLayout = new QHBoxLayout(stepWidget);
-        stepLayout->setContentsMargins(0, 0, 0, 0);
-        stepLayout->setSpacing(14);
-        auto* number = new QLabel(step.first, stepWidget);
-        number->setObjectName("AiFlowNumber");
-        number->setProperty("state", flowIndex < 2 ? "done" : (flowIndex == 2 ? "active" : "pending"));
-        number->setAlignment(Qt::AlignCenter);
-        number->setFixedSize(flowIndex == 2 ? 38 : 34, flowIndex == 2 ? 38 : 34);
-        auto* text = new QLabel(step.second, stepWidget);
-        text->setObjectName("AiFlowText");
-        text->setProperty("state", flowIndex == 2 ? "active" : (flowIndex > 2 ? "pending" : "done"));
-        stepLayout->addWidget(number);
-        stepLayout->addWidget(text, 1);
-        flowLayout->addWidget(stepWidget);
-        flowLayout->addSpacing(flowIndex == 2 ? 10 : 6);
-        ++flowIndex;
-    }
-    flowLayout->addSpacing(10);
-    auto* candidateTitle = new QLabel("候选内容预览", flowCard);
-    candidateTitle->setObjectName("AiPreviewTitle");
-    flowLayout->addWidget(candidateTitle);
-    auto* candidateBox = new QWidget(flowCard);
-    candidateBox->setObjectName("AiCandidateBox");
-    candidateBox->setFixedHeight(160);
-    auto* candidateLayout = new QVBoxLayout(candidateBox);
-    candidateLayout->setContentsMargins(14, 14, 14, 14);
-    auto* candidateText = new QLabel("本章节将从项目理解、施工组织、质量安全、\n进度保障四个方面展开论述。针对本项目的地\n质特点，我们采用...", candidateBox);
-    candidateText->setObjectName("AiCandidateText");
-    candidateText->setWordWrap(true);
-    candidateLayout->addWidget(candidateText);
-    flowLayout->addWidget(candidateBox);
-    flowLayout->addStretch();
-
-    pageLayout->addWidget(apiCard, 1);
-    pageLayout->addWidget(promptCard, 1);
-    pageLayout->addWidget(flowCard, 1);
-    return page;
 }
 
 QWidget* AutoCadGui::createCard(const QString& title, QLayout* contentLayout) {
@@ -1459,20 +1056,6 @@ void AutoCadGui::applyStyles() {
             background: #eff6ff;
             border-color: #93c5fd;
         }
-        QStackedWidget#TenderUploadStack,
-        QWidget#TenderSelectedPage {
-            background: transparent;
-            border: none;
-        }
-        QPushButton#TenderUploadPrompt {
-            background: #fbfdff;
-            border: 2px dashed #c9d8eb;
-            border-radius: 14px;
-        }
-        QPushButton#TenderUploadPrompt:hover {
-            background: #f5f9ff;
-            border-color: #87aef0;
-        }
         QLabel#UploadIcon {
             background: #ffffff;
             border: 1px solid #f1f5f9;
@@ -1490,11 +1073,6 @@ void AutoCadGui::applyStyles() {
             color: #334155;
             font-size: 14px;
             font-weight: 600;
-        }
-        QWidget#UploadedTenderFile {
-            background: #ffffff;
-            border: 1px solid #e0e8f3;
-            border-radius: 10px;
         }
         QLabel#SelectedFilesTitle {
             color: #071a38;
@@ -1700,206 +1278,6 @@ void AutoCadGui::applyStyles() {
     )");
 
     setStyleSheet(styleSheet() + R"(
-        QWidget#AiSettingsCard {
-            background: #ffffff;
-            border: 1px solid #ffffff;
-            border-radius: 18px;
-        }
-        QLabel#AiCardIcon {
-            background: transparent;
-            border: none;
-            font-size: 22px;
-            font-weight: 900;
-        }
-        QLabel#AiCardIcon[tone="blue"] {
-            color: #2563eb;
-        }
-        QLabel#AiCardIcon[tone="purple"] {
-            color: #a855f7;
-        }
-        QLabel#AiCardIcon[tone="teal"] {
-            color: #0fbaaa;
-        }
-        QLabel#AiCardTitle {
-            color: #1e293b;
-            font-size: 24px;
-            font-weight: 800;
-        }
-        QFrame#AiCardDivider {
-            background: #edf2f7;
-            border: none;
-        }
-        QLabel#AiFieldLabel {
-            color: #334155;
-            font-size: 16px;
-            font-weight: 500;
-        }
-        QComboBox#AiComboBox,
-        QLineEdit#SettingsInput {
-            background: #f8fafc;
-            border: 1px solid #dbe3ef;
-            border-radius: 10px;
-            padding: 0 14px;
-            color: #1e293b;
-            font-size: 16px;
-            selection-background-color: #2563eb;
-        }
-        QComboBox#AiComboBox:focus,
-        QLineEdit#SettingsInput:focus {
-            background: #ffffff;
-            border-color: #93c5fd;
-        }
-        QComboBox#AiComboBox::drop-down {
-            width: 28px;
-            border: none;
-        }
-        QLabel#AiStatusBadge {
-            background: #fff7ed;
-            border: 1px solid #fed7aa;
-            border-radius: 6px;
-            color: #f59e0b;
-            padding: 0 10px;
-            font-size: 13px;
-            font-weight: 700;
-        }
-        QPushButton#AiGhostButton {
-            background: #ffffff;
-            border: 1px solid #dbe3ef;
-            border-radius: 10px;
-            color: #475569;
-            padding: 0 18px;
-            font-size: 15px;
-            font-weight: 600;
-        }
-        QPushButton#AiGhostButton:hover {
-            background: #f8fafc;
-            border-color: #cbd5e1;
-        }
-        QPushButton#AiBlueButton {
-            background: #2563eb;
-            border: none;
-            border-radius: 10px;
-            color: #ffffff;
-            padding: 0 18px;
-            font-size: 15px;
-            font-weight: 700;
-        }
-        QPushButton#AiPurpleButton {
-            background: #9d19f5;
-            border: none;
-            border-radius: 10px;
-            color: #ffffff;
-            padding: 0 20px;
-            font-size: 15px;
-            font-weight: 700;
-        }
-        QWidget#PromptTabBar {
-            background: #f8fafc;
-            border: none;
-            border-radius: 12px;
-        }
-        QPushButton#PromptTab,
-        QPushButton#PromptTabActive {
-            border-radius: 10px;
-            border: none;
-            font-size: 16px;
-            font-weight: 500;
-        }
-        QPushButton#PromptTab {
-            background: transparent;
-            color: #64748b;
-        }
-        QPushButton#PromptTabActive {
-            background: #ffffff;
-            border: 1px solid #dbe3ef;
-            color: #2563eb;
-        }
-        QWidget#PromptEditorBox {
-            background: #f8fafc;
-            border: 1px solid #dbe3ef;
-            border-radius: 10px;
-        }
-        QTextEdit#PromptEditor {
-            background: #f8fafc;
-            border: none;
-            border-radius: 10px;
-            color: #334155;
-            padding: 12px 14px;
-            font-family: "Microsoft YaHei UI", "Segoe UI";
-            font-size: 15px;
-            line-height: 22px;
-        }
-        QWidget#PromptVariablePanel {
-            background: #f1f5f9;
-            border-top: 1px solid #dbe3ef;
-            border-radius: 0px;
-        }
-        QLabel#AiSmallLabel {
-            color: #52678a;
-            font-size: 13px;
-            font-weight: 500;
-        }
-        QLabel#VariableChip {
-            background: #ffffff;
-            border: 1px solid #dbe3ef;
-            border-radius: 6px;
-            color: #8b1cf6;
-            font-size: 13px;
-            font-weight: 700;
-            padding: 0 10px;
-        }
-        QWidget#AiFlowStep {
-            background: transparent;
-            border: none;
-        }
-        QLabel#AiFlowNumber {
-            border-radius: 17px;
-            font-size: 14px;
-            font-weight: 800;
-        }
-        QLabel#AiFlowNumber[state="done"] {
-            background: #b9f6ec;
-            color: #0f766e;
-        }
-        QLabel#AiFlowNumber[state="active"] {
-            background: #14b8a6;
-            color: #ffffff;
-            border-radius: 19px;
-            font-size: 15px;
-        }
-        QLabel#AiFlowNumber[state="pending"] {
-            background: #f1f5f9;
-            color: #94a3b8;
-        }
-        QLabel#AiFlowText {
-            background: transparent;
-            border: none;
-            color: #52678a;
-            font-size: 16px;
-            font-weight: 500;
-        }
-        QLabel#AiFlowText[state="active"] {
-            color: #0f766e;
-            font-weight: 800;
-        }
-        QLabel#AiFlowText[state="pending"] {
-            color: #94a3b8;
-        }
-        QLabel#AiPreviewTitle {
-            color: #334155;
-            font-size: 15px;
-            font-weight: 600;
-        }
-        QWidget#AiCandidateBox {
-            background: #ecfdf5;
-            border: 1px solid #b9f6ec;
-            border-radius: 10px;
-        }
-        QLabel#AiCandidateText {
-            color: #64748b;
-            font-size: 15px;
-            line-height: 24px;
-        }
         QLabel#QueueTitle {
             color: #1e293b;
             font-size: 24px;
@@ -2802,88 +2180,25 @@ void AutoCadGui::setGenerationCheck(
     }
 }
 
-void AutoCadGui::chooseTenderFile() {
-    const QString file = QFileDialog::getOpenFileName(
-        this,
-        "选择招标文件",
-        workspaceRoot(),
-        "Tender Files (*.pdf *.docx *.doc *.txt);;Word Files (*.docx *.doc);;PDF Files (*.pdf);;Text Files (*.txt);;All Files (*)");
-
-    if (file.isEmpty()) {
-        return;
-    }
-
-    tenderFileEdit_->setText(QDir::toNativeSeparators(file));
-    refreshTenderFileStatus();
-}
-
-void AutoCadGui::refreshTenderFileStatus() {
-    if (!tenderUploadStack_ || !tenderFileEdit_) {
-        return;
-    }
-
-    const QString path = tenderFileEdit_->text().trimmed();
-    if (path.isEmpty()) {
-        tenderUploadStack_->setCurrentIndex(0);
-        return;
-    }
-
-    const QFileInfo info(path);
-    if (tenderFileNameLabel_) {
-        tenderFileNameLabel_->setText(info.fileName());
-        tenderFileNameLabel_->setToolTip(QDir::toNativeSeparators(path));
-    }
-    if (tenderFileMetaLabel_) {
-        const qint64 kb = qMax<qint64>(1, info.size() / 1024);
-        tenderFileMetaLabel_->setText(QString("%1 KB · 待解析章节和格式要求").arg(kb));
-    }
-    tenderUploadStack_->setCurrentIndex(1);
-}
-
 void AutoCadGui::setActiveModule(int index) {
     if (!contentStack_) {
         return;
     }
 
-    contentStack_->setCurrentIndex(index);
-    const QVector<QPushButton*> buttons = {cadNavButton_, tenderNavButton_, aiSettingsNavButton_};
-    for (int i = 0; i < buttons.size(); ++i) {
-        if (!buttons[i]) {
-            continue;
-        }
-        buttons[i]->setObjectName(i == index ? "ActiveNavButton" : "NavButton");
-        polish(buttons[i]);
+    contentStack_->setCurrentIndex(qBound(0, index, contentStack_->count() - 1));
+    if (cadNavButton_) {
+        cadNavButton_->setObjectName("ActiveNavButton");
+        polish(cadNavButton_);
     }
     if (fileLibraryNavButton_) {
         fileLibraryNavButton_->setObjectName("NavButton");
         polish(fileLibraryNavButton_);
     }
-
-    if (index == 0) {
-        if (pageTitleIconLabel_) {
-            pageTitleIconLabel_->setText("≡");
-            pageTitleIconLabel_->setProperty("tone", "cad");
-            polish(pageTitleIconLabel_);
-        }
-        pageTitleLabel_->setText("批量生成衬砌平面图");
-        pageSubtitleLabel_->setText("上传外观病害总表，自动匹配板长基础数据，批量生成各个数据表的 DXF 图纸。");
+    if (pageTitleIconLabel_) {
+        pageTitleIconLabel_->setText("≡");
+        pageTitleIconLabel_->setProperty("tone", "cad");
+        polish(pageTitleIconLabel_);
     }
-    else if (index == 1) {
-        if (pageTitleIconLabel_) {
-            pageTitleIconLabel_->setText("▤");
-            pageTitleIconLabel_->setProperty("tone", "word");
-            polish(pageTitleIconLabel_);
-        }
-        pageTitleLabel_->setText("标书 Word 框架生成");
-        pageSubtitleLabel_->setText("上传招标文件，自动解析章节、评分项与格式要求，生成可编辑的 Word 标书框架。");
-    }
-    else {
-        if (pageTitleIconLabel_) {
-            pageTitleIconLabel_->setText("✦");
-            pageTitleIconLabel_->setProperty("tone", "ai");
-            polish(pageTitleIconLabel_);
-        }
-        pageTitleLabel_->setText("AI 设置与提示词管理");
-        pageSubtitleLabel_->setText("配置 AI API Key、模型参数和自定义提示词，生成内容可应用到标书 Word 框架中的章节。");
-    }
+    pageTitleLabel_->setText("批量生成衬砌平面图");
+    pageSubtitleLabel_->setText("上传外观病害总表，自动匹配板长基础数据，批量生成各个数据表的 DXF 图纸。");
 }
